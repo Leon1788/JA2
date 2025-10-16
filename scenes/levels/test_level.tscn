@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3 uid="uid://bwul4eh6hcv8g"]
+
+[ext_resource type="Script" uid="uid://bbtr6fm68qjin" path="res://scripts/test_level.gd" id="1"]
+
+[node name="TestLevel" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 5, 15, 15)
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.707107, 0.707107, 0, -0.707107, 0.707107, 0, 10, 0)

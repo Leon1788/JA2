@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="MercData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/merc_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+merc_name = "Ivan Dolvich"
+base_health = 100
+base_agility = 85
+base_strength = 75
+base_wisdom = 60
+base_leadership = 70
+marksmanship = 92
+mechanical = 45
+explosives = 30
+medical = 25
+health_head = 35
+health_thorax = 85
+health_stomach = 70
+health_left_arm = 60
+health_right_arm = 60
+health_left_leg = 65
+health_right_leg = 65

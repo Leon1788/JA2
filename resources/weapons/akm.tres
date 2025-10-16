@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/weapon_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+weapon_name = "AKM"
+caliber = "7.62x39mm"
+base_damage = 35
+base_accuracy = 70
+base_recoil = 55
+base_range = 30
+ap_cost_aim = 2
+ap_cost_shoot = 4
+magazine_size = 30
+current_ammo = 30
