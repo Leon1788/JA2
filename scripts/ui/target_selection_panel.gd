@@ -17,7 +17,6 @@ var shooter: Merc
 var target: Merc
 
 func _ready() -> void:
-	# Finde alle Nodes manuell
 	head_button = $VBoxContainer/HeadButton
 	thorax_button = $VBoxContainer/ThoraxButton
 	stomach_button = $VBoxContainer/StomachButton
@@ -55,36 +54,31 @@ func update_button_texts() -> void:
 		print("ERROR: cover_label not found!")
 		return
 	
-	print("\n=== UI UPDATE ===")
-	print("Updating target selection UI")
+	print("\n=== TARGET SELECTION UI UPDATE ===")
+	print("Shooter: ", shooter.merc_data.merc_name)
+	print("Target: ", target.merc_data.merc_name)
 	
-	# Check for cover using shooter's grid manager reference
-	var has_cover = false
-	var cover_info = ""
+	var target_pos = target.movement_component.current_grid_pos
+	var visibility = shooter.get_visibility_level(target_pos)
 	
-	if shooter.grid_manager_ref:
-		print("Grid manager found")
-		var cover = shooter.grid_manager_ref.get_cover_between(shooter.movement_component.current_grid_pos, target.movement_component.current_grid_pos)
-		if cover:
-			has_cover = true
-			cover_info = "TARGET IN COVER!\n%s (-%d%%)" % [cover.cover_data.cover_name, int(cover.get_hit_penalty())]
-			print("UI: Cover detected - ", cover.cover_data.cover_name)
-		else:
-			print("UI: No cover found")
-	else:
-		print("ERROR: No grid_manager_ref on shooter!")
+	print("Target position: ", target_pos)
+	print("Visibility level: ", visibility)
 	
-	if has_cover:
-		cover_label.text = cover_info
-		cover_label.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
-		print("Set label to: ", cover_info)
-	else:
-		cover_label.text = "Clear Shot"
-		cover_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
-		print("Set label to: Clear Shot")
+	# Update Cover Label
+	match visibility:
+		FOVGridSystem.VisibilityLevel.BLOCKED:
+			cover_label.text = "NO LINE OF SIGHT!"
+			cover_label.add_theme_color_override("font_color", Color(1.0, 0.0, 0.0))
+		FOVGridSystem.VisibilityLevel.PARTIAL:
+			cover_label.text = "TARGET IN COVER!\n(-25% hit chance)"
+			cover_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.0))
+		FOVGridSystem.VisibilityLevel.CLEAR:
+			cover_label.text = "Clear Shot"
+			cover_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
 	
-	print("=== END UI UPDATE ===\n")
+	print("Cover label set to: ", cover_label.text)
 	
+	# Update body part buttons
 	var parts = [
 		TargetingSystem.BodyPart.HEAD,
 		TargetingSystem.BodyPart.THORAX,
@@ -105,26 +99,23 @@ func update_button_texts() -> void:
 		right_leg_button
 	]
 	
-	# Get visible body parts
-	var visible_parts = {}
-	if shooter.grid_manager_ref:
-		visible_parts = LineOfSightSystem.get_visible_body_parts_for_ui(shooter, target, shooter.grid_manager_ref, shooter.get_world_3d())
-	
 	for i in range(parts.size()):
 		var part = parts[i]
 		var button = buttons[i]
 		var name = TargetingSystem.get_display_name(part)
 		
-		# Check if this part is visible
-		var is_visible = visible_parts.has(part)
-		
-		if is_visible:
+		# Alle Körperteile sichtbar wenn Target sichtbar
+		if visibility > FOVGridSystem.VisibilityLevel.BLOCKED:
 			var chance = shooter.combat_component.get_hit_chance_for_part(target, part)
 			button.text = "%s: %.1f%%" % [name, chance]
 			button.disabled = false
+			print("  ", name, ": ", chance, "%")
 		else:
 			button.text = "%s: BLOCKED" % name
 			button.disabled = true
+			print("  ", name, ": BLOCKED")
+	
+	print("=== END UI UPDATE ===\n")
 
 func _on_head_pressed() -> void:
 	body_part_selected.emit(TargetingSystem.BodyPart.HEAD)

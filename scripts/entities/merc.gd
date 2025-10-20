@@ -18,8 +18,10 @@ class_name Merc
 var grid_position: Vector2i = Vector2i(0, 0)
 var grid_manager_ref: GridManager
 
+# FOV Grid: Welche Tiles sieht dieser Soldat?
+var fov_grid: Dictionary = {}
+
 func _ready() -> void:
-	# Warte bis alle Nodes bereit sind
 	await get_tree().process_frame
 	
 	if merc_data:
@@ -34,10 +36,7 @@ func initialize() -> void:
 	stance_system.initialize(self)
 	facing_system.initialize(self)
 	
-	# Connect systems
 	health_component.set_status_effect_system(status_effect_system)
-	
-	# Set team color
 	visual_component.set_team_color(is_player_unit)
 	
 	if weapon_data:
@@ -46,16 +45,31 @@ func initialize() -> void:
 func initialize_movement(grid_manager: GridManager) -> void:
 	grid_manager_ref = grid_manager
 	movement_component.initialize(self, grid_manager, action_point_component)
-	
-	# Update combat component mit grid manager
 	combat_component.grid_manager = grid_manager
+	
+	# Berechne initiales FOV Grid
+	update_fov_grid()
+
+func update_fov_grid() -> void:
+	if grid_manager_ref:
+		fov_grid = FOVGridSystem.calculate_fov_grid(self, grid_manager_ref)
+		print(merc_data.merc_name, " FOV updated. Visible tiles: ", fov_grid.size())
+
+func can_see_position(target_pos: Vector2i) -> bool:
+	if not fov_grid.has(target_pos):
+		return false
+	return fov_grid[target_pos] > FOVGridSystem.VisibilityLevel.BLOCKED
+
+func get_visibility_level(target_pos: Vector2i) -> int:
+	if not fov_grid.has(target_pos):
+		return FOVGridSystem.VisibilityLevel.BLOCKED
+	return fov_grid[target_pos]
 
 func start_turn() -> void:
 	action_point_component.reset_ap()
 	animation_component.play_idle()
-	
-	# Process status effects at turn start
 	status_effect_system.process_turn_effects()
+	update_fov_grid()
 
 func end_turn() -> void:
 	pass
@@ -68,6 +82,7 @@ func move_to_grid(target_pos: Vector2i) -> bool:
 	var success = movement_component.move_to(target_pos)
 	if success:
 		animation_component.play_idle()
+		update_fov_grid()  # Update nach Bewegung
 	return success
 
 func can_move_to_grid(target_pos: Vector2i) -> bool:
@@ -99,16 +114,25 @@ func can_shoot(target: Merc) -> bool:
 	return combat_component.can_shoot(target)
 
 func change_stance(new_stance: StanceSystem.Stance) -> bool:
-	return stance_system.change_stance(new_stance)
+	var success = stance_system.change_stance(new_stance)
+	if success:
+		update_fov_grid()  # Update nach Stance-Wechsel
+	return success
 
 func get_eye_position() -> Vector3:
 	return global_position + Vector3(0, stance_system.get_eye_height(), 0)
 
 func rotate_towards(target: Merc) -> bool:
-	return facing_system.rotate_towards_target(target)
+	var success = facing_system.rotate_towards_target(target)
+	if success:
+		update_fov_grid()  # Update nach Rotation
+	return success
 
 func rotate_to_angle(angle: float) -> bool:
-	return facing_system.rotate_to_angle(angle)
+	var success = facing_system.rotate_to_angle(angle)
+	if success:
+		update_fov_grid()  # Update nach Rotation
+	return success
 
 func on_death() -> void:
 	visual_component.set_dead_visual()

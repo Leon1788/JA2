@@ -21,8 +21,9 @@ func can_shoot(target: Merc) -> bool:
 	if not target.is_alive():
 		return false
 	
-	# Check if target is in FOV
-	if not owner_merc.facing_system.is_in_field_of_view(target.global_position):
+	# Check if target position is visible in FOV Grid
+	var target_pos = target.movement_component.current_grid_pos
+	if not owner_merc.can_see_position(target_pos):
 		return false
 	
 	if equipped_weapon.current_ammo <= 0:
@@ -38,13 +39,9 @@ func shoot(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionary:
 	if not can_shoot(target):
 		return {"success": false, "reason": "Cannot shoot"}
 	
-	# Spend AP
 	action_point_component.spend_ap(equipped_weapon.ap_cost_shoot)
-	
-	# Ammo verbrauchen
 	equipped_weapon.current_ammo -= 1
 	
-	# Berechne Trefferchance
 	var hit_chance = get_hit_chance_for_part(target, body_part)
 	var roll = randf() * 100.0
 	
@@ -62,7 +59,6 @@ func shoot(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionary:
 	}
 	
 	if result.hit:
-		# Damage mit Multiplier
 		var base_damage = equipped_weapon.base_damage
 		var damage_multiplier = TargetingSystem.get_damage_multiplier(body_part)
 		var final_damage = int(base_damage * damage_multiplier)
@@ -71,7 +67,6 @@ func shoot(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionary:
 		result.damage = final_damage
 		result.target_killed = not target.is_alive()
 	
-	# Reset aim bonus nach Schuss
 	aim_bonus = 0
 	
 	return result
@@ -92,27 +87,23 @@ func get_current_aim_bonus() -> int:
 func get_hit_chance_for_part(target: Merc, body_part: TargetingSystem.BodyPart) -> float:
 	var base_chance = float(owner_merc.merc_data.marksmanship)
 	
-	# Distance penalty
 	var distance = owner_merc.movement_component.current_grid_pos.distance_to(target.movement_component.current_grid_pos)
 	var distance_penalty = distance * 2.0
 	
-	# Weapon accuracy
 	var weapon_accuracy = float(equipped_weapon.base_accuracy) / 100.0
-	
-	# Body part size modifier
 	var size_modifier = TargetingSystem.get_size_modifier(body_part)
-	
-	# Status effect modifier
 	var accuracy_modifier = owner_merc.status_effect_system.get_accuracy_modifier()
 	
-	# Cover penalty
+	# Cover penalty based on visibility level
 	var cover_penalty = 0.0
-	if grid_manager:
-		var cover = grid_manager.get_cover_between(owner_merc.movement_component.current_grid_pos, target.movement_component.current_grid_pos)
-		if cover:
-			cover_penalty = cover.get_hit_penalty()
+	var target_pos = target.movement_component.current_grid_pos
+	var visibility = owner_merc.get_visibility_level(target_pos)
 	
-	# Final calculation
+	if visibility == FOVGridSystem.VisibilityLevel.PARTIAL:
+		cover_penalty = 25.0  # GRÜN = durch Deckung
+	elif visibility == FOVGridSystem.VisibilityLevel.BLOCKED:
+		cover_penalty = 100.0  # Sollte nie passieren da can_shoot() bereits prüft
+	
 	var final_chance = (base_chance + aim_bonus + accuracy_modifier - distance_penalty + size_modifier - cover_penalty) * weapon_accuracy
 	
 	return clamp(final_chance, 5.0, 95.0)
