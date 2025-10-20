@@ -9,8 +9,14 @@ var fov_visualizer: Node3D  # Wird manuell erstellt
 
 func _ready() -> void:
 	print("\n" + "=".repeat(60))
-	print("FOV GRID SYSTEM TEST - 11x11 Grid")
+	print("FOV GRID SYSTEM TEST - 21x21 Grid")
 	print("=".repeat(60))
+	
+	# Kamera anpassen für 21x21 Grid (Mitte = 10,10)
+	var camera = get_node("Camera3D")
+	if camera:
+		camera.position = Vector3(10.5, 20, 20)
+		camera.look_at(Vector3(10.5, 0, 10.5))
 	
 	setup_scene()
 	setup_units()
@@ -24,6 +30,11 @@ func setup_scene() -> void:
 	visual_grid = VisualGrid.new()
 	visual_grid.grid_size = Vector2i(21, 21)  # 21x21 für echte Mitte bei (10,10)
 	add_child(visual_grid)
+	
+	# Ändere Grid-Farbe zu schwarz
+	await get_tree().process_frame
+	if visual_grid.mesh_instance and visual_grid.mesh_instance.material_override:
+		visual_grid.mesh_instance.material_override.albedo_color = Color(0.0, 0.0, 0.0, 1.0)
 	
 	# Erstelle einfachen FOV Visualizer
 	fov_visualizer = Node3D.new()
@@ -80,12 +91,12 @@ func spawn_cover(grid_pos: Vector2i, type: String) -> void:
 
 func test_fov_system() -> void:
 	print("\n" + "=".repeat(60))
-	print("FOV TEST - Single Wall at (5,5)")
+	print("FOV TEST - Single Wall at (10,10)")
 	print("=".repeat(60))
 	
 	print("\nPlayer: ", merc.movement_component.current_grid_pos)
 	print("Facing: ", merc.facing_system.get_facing_angle(), "°")
-	print("Wall: (5,5)")
+	print("Wall: (10,10)")
 	
 	print("\n>>> FORCING FOV RECALCULATION WITH DEBUG <<<")
 	merc.update_fov_grid()
@@ -155,7 +166,7 @@ func print_controls() -> void:
 	print("=".repeat(60) + "\n")
 
 func _input(event: InputEvent) -> void:
-	if turn_manager.current_phase != TurnManager.TurnPhase.PLAYER:
+	if not turn_manager or turn_manager.current_phase != TurnManager.TurnPhase.PLAYER:
 		return
 	
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
@@ -245,9 +256,9 @@ func update_fov_visualization() -> void:
 			BLOCKED:
 				continue  # Skip blocked tiles
 			PARTIAL:
-				color = Color(0.0, 1.0, 0.0, 0.3)  # GRÜN = durch Deckung
+				color = Color(0.0, 1.0, 0.0, 0.4)  # GRÜN = durch Deckung
 			CLEAR:
-				color = Color(1.0, 1.0, 0.0, 0.3)  # GELB = frei sichtbar
+				color = Color(1.0, 1.0, 0.0, 0.4)  # GELB = frei sichtbar
 		
 		_draw_tile(immediate_mesh, pos, color)
 	
@@ -256,7 +267,7 @@ func update_fov_visualization() -> void:
 func _draw_tile(mesh: ImmediateMesh, grid_pos: Vector2i, color: Color) -> void:
 	var world_pos = grid_manager.grid_to_world(grid_pos)
 	var tile_size = grid_manager.TILE_SIZE
-	var height = 0.06
+	var height = 0.01  # Unter dem Grid (Grid ist bei 0.05)
 	
 	var tl = Vector3(world_pos.x - tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
 	var tr = Vector3(world_pos.x + tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
