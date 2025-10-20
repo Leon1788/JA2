@@ -3,7 +3,7 @@ class_name FOVGridSystem
 
 enum VisibilityLevel {
 	BLOCKED = 0,
-	PARTIAL = 1,
+	PARTIAL = 1,  # Wird nicht mehr genutzt, aber bleibt für Kompatibilität
 	CLEAR = 2
 }
 
@@ -44,117 +44,89 @@ static func _is_in_fov_cone(from: Vector2i, to: Vector2i, facing_angle: float, f
 	if from == to:
 		return true
 	
-	# Berechne Richtungsvektor (Grid-Space)
 	var dx = float(to.x - from.x)
 	var dy = float(to.y - from.y)
 	
-	# Grid: +X = Rechts (Ost), +Y = Runter (Süd)
-	# Facing: 0° = Nord, 90° = Ost, 180° = Süd, 270° = West
-	
-	# Berechne Winkel zum Ziel in Godot-Koordinaten
-	# atan2 gibt: 0° = +X (Ost), 90° = -Y (Nord in Godot), 180° = -X (West), -90° = +Y (Süd)
-	# ABER: Grid +Y = Süd (nicht Nord!), also Y invertieren
-	var angle_to_target_rad = atan2(dx, -dy)  # -dy weil Grid +Y = Süd
+	var angle_to_target_rad = atan2(dx, -dy)
 	var angle_to_target_deg = fmod(rad_to_deg(angle_to_target_rad) + 360.0, 360.0)
 	
-	# Berechne Differenz zwischen Facing und Target
 	var angle_diff = angle_to_target_deg - facing_angle
 	
-	# Normalisiere auf -180 bis +180
 	while angle_diff > 180.0:
 		angle_diff -= 360.0
 	while angle_diff < -180.0:
 		angle_diff += 360.0
 	
-	var in_cone = abs(angle_diff) <= (fov_angle / 2.0)
-	
-	# DEBUG für kritische Tiles
-	if from == Vector2i(5, 6) and (to.x == 5 and to.y < 5):
-		print("DEBUG FOV_CONE: from=", from, " to=", to)
-		print("  dx=", dx, " dy=", dy)
-		print("  angle_to_target=", angle_to_target_deg, "°")
-		print("  facing_angle=", facing_angle, "°")
-		print("  angle_diff=", angle_diff, "°")
-		print("  fov_angle/2=", fov_angle/2.0, "°")
-		print("  IN_CONE=", in_cone)
-	
-	return in_cone
+	return abs(angle_diff) <= (fov_angle / 2.0)
 
 static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float, grid_manager: GridManager) -> int:
 	var line = _bresenham_line(from, to)
 	
-	# DEBUG für Tiles nach Norden von (5,6)
-	var should_debug = (from == Vector2i(5, 6) and to.x == 5 and to.y < 6)
-	
-	if should_debug:
-		print("\nDEBUG LoS: from=", from, " to=", to)
-		print("  Line length: ", line.size())
-		print("  Line: ", line)
-	
 	if line.size() <= 2:
-		if should_debug:
-			print("  >>> Result: CLEAR (line too short)")
 		return VisibilityLevel.CLEAR
 	
+	# Prüfe alle Zellen zwischen Start und Ziel
 	var highest_cover_height = 0.0
-	var closest_blocking_distance = 999.0
+	var closest_cover_distance = 999.0
+	var cover_found = false
 	
 	for i in range(1, line.size() - 1):
 		var cell = line[i]
 		var cover = grid_manager.get_cover_at(cell)
 		
-		if should_debug:
-			if cover:
-				print("  [", i, "] Cover at ", cell, " height=", cover.cover_data.cover_height)
-			else:
-				print("  [", i, "] No cover at ", cell)
-		
 		if cover:
+			cover_found = true
 			var distance_to_cover = from.distance_to(cell)
 			var cover_height = cover.cover_data.cover_height
 			
 			if cover_height > highest_cover_height:
 				highest_cover_height = cover_height
-				closest_blocking_distance = distance_to_cover
+				closest_cover_distance = distance_to_cover
 	
-	if highest_cover_height == 0.0:
-		if should_debug:
-			print("  >>> Result: CLEAR (no cover)")
+	if not cover_found:
 		return VisibilityLevel.CLEAR
 	
-	var distance = closest_blocking_distance
+	# Berechne Distanz vom Cover zum Ziel
+	var total_distance = from.distance_to(to)
+	var distance_beyond_cover = total_distance - closest_cover_distance
 	
-	if should_debug:
-		print("  Highest cover: ", highest_cover_height, "m at distance ", distance)
-		print("  Eye height: ", eye_height, "m")
+	# BINÄRES SYSTEM: Nur CLEAR oder BLOCKED
 	
-	if distance <= 2:
+	# REGEL 1: Sehr nah am Cover (1-2 Tiles)
+	if closest_cover_distance <= 2.0:
+		# Hohe Wand = blockiert
 		if highest_cover_height >= eye_height * 0.7:
-			if should_debug:
-				print("  >>> Result: BLOCKED (close + high)")
 			return VisibilityLevel.BLOCKED
 		else:
-			if should_debug:
-				print("  >>> Result: PARTIAL (close + low)")
-			return VisibilityLevel.PARTIAL
-	elif distance > 5:
-		if highest_cover_height >= 2.5:
-			if should_debug:
-				print("  >>> Result: BLOCKED (far + very high)")
-			return VisibilityLevel.BLOCKED
-		else:
-			if should_debug:
-				print("  >>> Result: CLEAR (far + ok)")
 			return VisibilityLevel.CLEAR
-	else:
-		if highest_cover_height >= 1.5:
-			if should_debug:
-				print("  >>> Result: BLOCKED (medium + high)")
-			return VisibilityLevel.BLOCKED
+	
+	# REGEL 2: Mittlere Distanz zum Cover (3-5 Tiles)
+	elif closest_cover_distance <= 5.0:
+		# Ziel NAH hinter Cover (1-3 Tiles)
+		if distance_beyond_cover <= 3.0:
+			if highest_cover_height >= 1.5:
+				return VisibilityLevel.BLOCKED
+			else:
+				return VisibilityLevel.CLEAR
+		# Ziel WEIT hinter Cover
 		else:
-			if should_debug:
-				print("  >>> Result: PARTIAL (medium + medium)")
-			return VisibilityLevel.PARTIAL
+			if highest_cover_height >= 2.5:
+				return VisibilityLevel.BLOCKED
+			else:
+				return VisibilityLevel.CLEAR
+	
+	# REGEL 3: Weit weg vom Cover (6+ Tiles)
+	else:
+		# Ziel NAH hinter Cover
+		if distance_beyond_cover <= 2.0:
+			if highest_cover_height >= 2.0:
+				return VisibilityLevel.BLOCKED
+			else:
+				return VisibilityLevel.CLEAR
+		# Ziel WEIT hinter Cover
+		else:
+			# Aus der Ferne ist fast alles sichtbar
+			return VisibilityLevel.CLEAR
 
 static func _bresenham_line(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 	var points: Array[Vector2i] = []
@@ -175,7 +147,12 @@ static func _bresenham_line(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 		if x == to.x and y == to.y:
 			break
 		
-		if error > 0:
+		# SYMMETRIE-FIX: Bei gleichem error, bevorzuge DIAGONALE
+		if error == 0:
+			x += x_inc
+			y += y_inc
+			error += dx - dy
+		elif error > 0:
 			x += x_inc
 			error -= dy
 		else:

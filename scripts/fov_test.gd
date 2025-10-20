@@ -22,7 +22,7 @@ func _ready() -> void:
 
 func setup_scene() -> void:
 	visual_grid = VisualGrid.new()
-	visual_grid.grid_size = Vector2i(11, 11)
+	visual_grid.grid_size = Vector2i(21, 21)  # 21x21 für echte Mitte bei (10,10)
 	add_child(visual_grid)
 	
 	# Erstelle einfachen FOV Visualizer
@@ -30,7 +30,7 @@ func setup_scene() -> void:
 	add_child(fov_visualizer)
 	
 	grid_manager = GridManager.new()
-	grid_manager.set_grid_bounds(Vector2i(0, 0), Vector2i(11, 11))
+	grid_manager.set_grid_bounds(Vector2i(0, 0), Vector2i(21, 21))
 	add_child(grid_manager)
 	
 	turn_manager = TurnManager.new()
@@ -40,7 +40,7 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	spawn_cover(Vector2i(5, 5), "high")
+	spawn_cover(Vector2i(10, 10), "high")  # Mitte bei (10,10)
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
