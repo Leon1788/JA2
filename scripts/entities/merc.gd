@@ -15,6 +15,8 @@ class_name Merc
 @onready var stance_system: StanceSystem = $StanceSystem
 @onready var facing_system: FacingSystem = $FacingSystem
 
+const FOVGridSystem = preload("res://scripts/systems/fov_grid_system.gd")
+
 var grid_position: Vector2i = Vector2i(0, 0)
 var grid_manager_ref: GridManager
 
