@@ -16,16 +16,11 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 	var facing_angle = soldier.facing_system.get_facing_angle()
 	var fov_angle = soldier.facing_system.fov_angle
 	
-	# Track blocked directions for shadow cones
-	var shadow_blocked: Dictionary = {}  # angle -> distance where blocked
-	
-	# DEBUG: Zähle Shadow-Blockierungen
+	var shadow_blocked: Dictionary = {}
 	var debug_shadow_blocks = 0
 	var debug_wall_angle = 0.0
 	var debug_wall_distance = 0.0
 	
-	# WICHTIG: Sortiere Tiles nach Distanz (nah → fern)
-	# So werden nahe Wände zuerst verarbeitet!
 	var tiles_to_check: Array = []
 	
 	for x in range(soldier_pos.x - MAX_SIGHT_RANGE, soldier_pos.x + MAX_SIGHT_RANGE + 1):
@@ -41,10 +36,8 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 			
 			tiles_to_check.append({"pos": target_pos, "dist": distance})
 	
-	# Sortiere nach Distanz (nah zuerst)
 	tiles_to_check.sort_custom(func(a, b): return a.dist < b.dist)
 	
-	# Jetzt verarbeite alle Tiles in richtiger Reihenfolge
 	for tile_data in tiles_to_check:
 		var target_pos = tile_data.pos
 		var distance = tile_data.dist
@@ -57,16 +50,13 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 			fov_grid[target_pos] = VisibilityLevel.BLOCKED
 			continue
 		
-		# Calculate angle to this tile
 		var angle_to_tile = _calculate_angle_to_target(soldier_pos, target_pos)
 		
-		# SCHRITT 1: Ist es im Schatten einer Wand, die wir SCHON gefunden haben?
 		if _is_in_shadow(target_pos, soldier_pos, angle_to_tile, distance, shadow_blocked):
 			fov_grid[target_pos] = VisibilityLevel.BLOCKED
 			debug_shadow_blocks += 1
 			continue
 		
-		# SCHRITT 2: Wenn nicht im Schatten, prüfe LoS (Sichtlinie)
 		var visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, grid_manager)
 		
 		
@@ -121,7 +111,6 @@ static func _calculate_angle_to_target(from: Vector2i, to: Vector2i) -> float:
 	return angle_deg
 
 static func _is_in_shadow(target_pos: Vector2i, soldier_pos: Vector2i, angle: float, distance: float, shadow_map: Dictionary) -> bool:
-	# Check if this angle has a shadow
 	for shadow_angle in shadow_map:
 		var angle_diff = abs(angle - shadow_angle)
 		if angle_diff > 180.0:
@@ -144,8 +133,8 @@ static func _is_in_shadow(target_pos: Vector2i, soldier_pos: Vector2i, angle: fl
 		# Shadow nur wenn:
 		# 1. Im Schatten-Winkel (dynamische Breite)
 		# 2. Weiter weg als die Wand
-		# 3. UND Wand ist mindestens 3 Tiles entfernt
-		if angle_diff < shadow_cone_width and distance > wall_distance and wall_distance >= 3.0:
+		# 3. UND Wand ist mindestens 2.5 Tiles entfernt (erlaubt diagonale bei 2.83)
+		if angle_diff < shadow_cone_width and distance > wall_distance and wall_distance >= 2.5:
 			return true
 	
 	return false
@@ -179,6 +168,11 @@ static func _is_in_fov_cone(from: Vector2i, to: Vector2i, facing_angle: float, f
 static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float, grid_manager: GridManager) -> int:
 	var line = _bresenham_line(from, to)
 	
+	# DEBUG für (5,10) → (11,12) und (11,13)
+	if from == Vector2i(5, 10) and (to == Vector2i(11, 12) or to == Vector2i(11, 13)):
+		print("\n>>> LoS DEBUG: ", from, " → ", to)
+		print("Bresenham line: ", line)
+	
 	if line.size() <= 2:
 		return VisibilityLevel.CLEAR
 	
@@ -195,6 +189,9 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 			cover_found = true
 			var distance_to_cover = from.distance_to(cell)
 			var cover_height = cover.cover_data.cover_height
+			
+			if from == Vector2i(5, 10) and (to == Vector2i(11, 12) or to == Vector2i(11, 13)):
+				print("  Found cover at: ", cell, " height: ", cover_height)
 			
 			if cover_height > highest_cover_height:
 				highest_cover_height = cover_height
@@ -218,7 +215,14 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 	# REGEL 2: Mittlere Distanz zum Cover (3-5 Tiles)
 	elif closest_cover_distance <= 5.0:
 		if distance_beyond_cover <= 3.0:
-			if highest_cover_height >= 1.5:
+			# Sonderfall: Schauen direkt auf die Wand selbst
+			if distance_beyond_cover < 0.1:
+				if highest_cover_height >= eye_height * 0.9:
+					return VisibilityLevel.BLOCKED
+				else:
+					return VisibilityLevel.CLEAR
+			# Normalfall: Schauen über/durch Wand
+			elif highest_cover_height >= 1.5:
 				return VisibilityLevel.BLOCKED
 			else:
 				return VisibilityLevel.CLEAR
@@ -231,7 +235,14 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 	# REGEL 3: Weit weg vom Cover (6+ Tiles)
 	else:
 		if distance_beyond_cover <= 2.0:
-			if highest_cover_height >= 2.0:
+			# Sonderfall: Schauen direkt auf die Wand selbst
+			if distance_beyond_cover < 0.1:
+				if highest_cover_height >= eye_height * 0.9:
+					return VisibilityLevel.BLOCKED
+				else:
+					return VisibilityLevel.CLEAR
+			# Normalfall: Schauen über/durch Wand
+			elif highest_cover_height >= 2.0:
 				return VisibilityLevel.BLOCKED
 			else:
 				return VisibilityLevel.CLEAR

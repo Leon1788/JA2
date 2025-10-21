@@ -6,7 +6,7 @@
 script = ExtResource("1")
 cover_name = "Wooden Crate"
 cover_type = 1
-cover_height = 1.0
+cover_height = 0.8
 hit_chance_penalty = 20.0
 is_destructible = true
 health = 50
