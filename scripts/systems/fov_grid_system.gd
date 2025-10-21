@@ -60,15 +60,37 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 		# Calculate angle to this tile
 		var angle_to_tile = _calculate_angle_to_target(soldier_pos, target_pos)
 		
-		# Check if in shadow from previous blocked tile
+		# SCHRITT 1: Ist es im Schatten einer Wand, die wir SCHON gefunden haben?
 		if _is_in_shadow(target_pos, soldier_pos, angle_to_tile, distance, shadow_blocked):
 			fov_grid[target_pos] = VisibilityLevel.BLOCKED
 			debug_shadow_blocks += 1
 			continue
 		
-		# Check line of sight
+		# SCHRITT 2: Wenn nicht im Schatten, prüfe LoS (Sichtlinie)
 		var visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, grid_manager)
+		
+		
+		# --- (V14 LOGIK - Nur echtes Cover wirft Schatten) ---
+		
+		# SCHRITT 3: Prüfe, ob DIESES TILE (target_pos) SELBST Cover ist.
+		var is_actual_cover = grid_manager.get_cover_at(target_pos) != null
+		
+		# Wenn es echtes Cover IST (z.B. (10,10)) UND die LoS es blockiert:
+		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
+			# Füge es zur Schattenkarte hinzu, damit es zukünftige Tiles blockiert.
+			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
+			
+			# (Nur Debug-Code für die Wand selbst)
+			if target_pos == Vector2i(10, 10):
+				debug_wall_angle = angle_to_tile
+				debug_wall_distance = distance
+		
+		# WICHTIG: Setze die Sichtbarkeit für das Tile.
+		# (Tiles wie (10,11) werden als BLOCKED markiert, aber NICHT zur shadow_map hinzugefügt)
 		fov_grid[target_pos] = visibility
+		
+		# --- ENDE V14 LOGIK ---
+		
 		
 		# DEBUG: Log Wand-Prüfung
 		if target_pos == Vector2i(10, 10):
@@ -78,17 +100,10 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 			print("  Distance: ", distance)
 			print("  LoS Result: ", "BLOCKED" if visibility == VisibilityLevel.BLOCKED else "CLEAR")
 			print(">>> END WALL CHECK <<<")
-		
-		# If blocked, add to shadow map
-		if visibility == VisibilityLevel.BLOCKED:
-			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
-			# DEBUG: Speichere Wand-Info
-			if target_pos == Vector2i(10, 10):
-				debug_wall_angle = angle_to_tile
-				debug_wall_distance = distance
 	
 	# DEBUG OUTPUT
-	if soldier_pos == Vector2i(7, 7) or soldier_pos == Vector2i(8, 8) or soldier_pos == Vector2i(6, 6):
+	# (Wir fügen (3,3) und (4,4) zur Debug-Liste hinzu)
+	if soldier_pos == Vector2i(3, 3) or soldier_pos == Vector2i(4, 4) or soldier_pos == Vector2i(5, 5) or soldier_pos == Vector2i(6, 6) or soldier_pos == Vector2i(7, 7) or soldier_pos == Vector2i(8, 8):
 		print("\n=== FOV DEBUG ===")
 		print("Position: ", soldier_pos)
 		print("Wall (10,10) angle: ", debug_wall_angle, "° distance: ", debug_wall_distance)
@@ -114,18 +129,18 @@ static func _is_in_shadow(target_pos: Vector2i, soldier_pos: Vector2i, angle: fl
 		
 		var wall_distance = shadow_map[shadow_angle]
 		
-		# DYNAMISCHER SHADOW CONE: Je weiter weg, desto schmaler!
-		# Bei 3 Tiles Distanz: 10° breit
-		# Bei 5 Tiles Distanz: 6° breit  
-		# Bei 8 Tiles Distanz: 3° breit (nur noch schmaler Streifen)
-		var shadow_cone_width = 10.0 - (wall_distance * 0.8)
+		
+		# --- ÄNDERUNG HIER (V19) ---
+		# Deckel die Distanz bei 8.0, damit der Schatten nicht zu schmal wird.
+		var effective_distance = min(wall_distance, 8.0)
+		
+		# Benutze effective_distance in der Formel (Basis V17)
+		var shadow_cone_width = 10.0 - (effective_distance * 0.8)
 		shadow_cone_width = max(shadow_cone_width, 2.0)  # Mindestens 2° breit
+		shadow_cone_width += 1.0 # Der Puffer von V17 bleibt
+		# --- ENDE ÄNDERUNG ---
 		
-		# WICHTIG: Für diagonale Positionen (angle_diff sehr klein) größere Toleranz!
-		# Bei exakt 0° Unterschied: Erweitere Shadow Cone um 50%
-		if angle_diff < 0.5:
-			shadow_cone_width *= 1.5
-		
+
 		# Shadow nur wenn:
 		# 1. Im Schatten-Winkel (dynamische Breite)
 		# 2. Weiter weg als die Wand
@@ -137,9 +152,6 @@ static func _is_in_shadow(target_pos: Vector2i, soldier_pos: Vector2i, angle: fl
 
 static func _add_to_shadow_map(shadow_map: Dictionary, angle: float, distance: float) -> void:
 	# KEIN Runden mehr! Speichere exakten Winkel
-	# Das verhindert dass bei 270° und 0° Schatten verloren gehen
-	
-	# Speichere die nächste blockierte Distanz für diesen exakten Winkel
 	if not shadow_map.has(angle):
 		shadow_map[angle] = distance
 	elif distance < shadow_map[angle]:

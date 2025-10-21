@@ -51,7 +51,7 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	spawn_cover(Vector2i(10, 10), "high")  # Mitte bei (10,10)
+	spawn_cover(Vector2i(10, 10), "low")  # Mitte bei (10,10)
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
@@ -75,11 +75,12 @@ func start_game() -> void:
 	ui_panel.update_display(merc)
 	update_fov_visualization()
 
+@warning_ignore("unused_parameter")
 func spawn_cover(grid_pos: Vector2i, type: String) -> void:
 	var cover_scene = preload("res://scenes/entities/CoverObject.tscn")
 	var cover = cover_scene.instantiate()
 	
-	cover.cover_data = load("res://resources/cover/wall_high.tres")
+	cover.cover_data = load("res://resources/cover/crate_low.tres")
 	cover.grid_position = grid_pos
 	cover.global_position = grid_manager.grid_to_world(grid_pos)
 	
@@ -270,6 +271,7 @@ func _draw_tile(mesh: ImmediateMesh, grid_pos: Vector2i, color: Color) -> void:
 	var height = 0.01  # Unter dem Grid (Grid ist bei 0.05)
 	
 	var tl = Vector3(world_pos.x - tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
+	@warning_ignore("shadowed_variable_base_class")
 	var tr = Vector3(world_pos.x + tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
 	var bl = Vector3(world_pos.x - tile_size * 0.5, height, world_pos.z + tile_size * 0.5)
 	var br = Vector3(world_pos.x + tile_size * 0.5, height, world_pos.z + tile_size * 0.5)
