@@ -76,7 +76,7 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 		if target_pos == Vector2i(10, 10) or target_pos == Vector2i(31, 10): # Prüft beide Cover Positionen
 			var cover_obj = grid_manager.get_cover_at(target_pos)
 			var cover_name = cover_obj.cover_data.cover_name if cover_obj and cover_obj.cover_data else "Unknown Cover"
-			print(">>> COVER CHECK (%s) <<<" % target_pos)
+			print(">>> COVER CHECK ((%s)) <<<" % target_pos) # Extra Klammern zur Identifizierung
 			print("  Cover Type: ", cover_name)
 			print("  Position: ", soldier_pos)
 			print("  Angle: ", angle_to_tile, "°")
@@ -202,8 +202,9 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 	elif closest_cover_distance <= 5.0:
 		# Ist das Ziel direkt HINTER der Deckung (<= 3.0 Einheiten dahinter)?
 		if distance_beyond_cover <= 3.0:
-			# Blockiert, wenn Höhe >= 1.5 ODER Höhe >= eye_height * 1.8 (aus V23)
-			if highest_cover_height >= 1.5 or highest_cover_height >= eye_height * 1.8:
+			# --- (V25 LOGIK) ---
+			# Blockiert, wenn Höhe >= 1.5 ODER Höhe >= eye_height * 1.8 ODER (NEU) Prone-Regel
+			if highest_cover_height >= 1.5 or highest_cover_height >= eye_height * 1.8 or (highest_cover_height >= eye_height * 0.9):
 				return VisibilityLevel.BLOCKED
 			else:
 				return VisibilityLevel.CLEAR
@@ -229,9 +230,9 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 		else:
 			# Blockiere nur bei sehr hoher Deckung (>= 2.5m)
 			if highest_cover_height >= 2.5:
-				return VisibilityLevel.BLOCKED # <-- KORRIGIERTE EINRÜCKUNG
+				return VisibilityLevel.BLOCKED
 			else:
-				return VisibilityLevel.CLEAR # <-- KORRIGIERTE EINRÜCKUNG
+				return VisibilityLevel.CLEAR
 		# --- ENDE V24b LOGIK ---
 
 
