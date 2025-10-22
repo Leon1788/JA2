@@ -77,6 +77,10 @@ func change_stance(new_stance: Stance) -> bool:
 	return true
 
 func _update_visual() -> void:
+	_update_mesh()
+	_update_collision_shape()
+
+func _update_mesh() -> void:
 	if not owner_merc.visual_component or not owner_merc.visual_component.model_mesh:
 		return
 	
@@ -85,6 +89,22 @@ func _update_visual() -> void:
 		mesh.height = get_capsule_height()
 		# Adjust position
 		owner_merc.visual_component.model_mesh.position.y = get_capsule_height() / 2.0
+		print("[Stance] ", owner_merc.merc_data.merc_name, " - Mesh height updated to ", get_capsule_height())
+
+func _update_collision_shape() -> void:
+	var collision_shape = owner_merc.get_node_or_null("CollisionShape3D")
+	if not collision_shape:
+		print("[Stance] WARNING: CollisionShape3D not found!")
+		return
+	
+	var shape = collision_shape.shape as CapsuleShape3D
+	if shape:
+		shape.height = get_capsule_height()
+		# Adjust position to match mesh
+		collision_shape.position.y = get_capsule_height() / 2.0
+		print("[Stance] ", owner_merc.merc_data.merc_name, " - CollisionShape height updated to ", get_capsule_height())
+	else:
+		print("[Stance] WARNING: CollisionShape is not CapsuleShape3D!")
 
 func _get_stance_name(stance: Stance) -> String:
 	match stance:

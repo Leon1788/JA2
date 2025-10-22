@@ -1,6 +1,7 @@
 extends Node3D
 
 var merc: Merc
+var enemy: Merc
 var grid_manager: GridManager
 var turn_manager: TurnManager
 var visual_grid: VisualGrid
@@ -9,13 +10,14 @@ var fov_visualizer: Node3D
 
 func _ready() -> void:
 	print("\n" + "=".repeat(60))
-	print("FOV GRID SYSTEM TEST - 42x21 Grid (2 Fields)")
+	print("LINE OF SIGHT RAYCAST TEST")
+	print("Enemy behind 0.8m wall - Testing visibility")
 	print("=".repeat(60))
 	
 	var camera = get_node("Camera3D")
 	if camera:
-		camera.position = Vector3(21.0, 25, 25)
-		camera.look_at(Vector3(21.0, 0, 10.5))
+		camera.position = Vector3(10.5, 25, 25)
+		camera.look_at(Vector3(10.5, 0, 10.5))
 	
 	setup_scene()
 	setup_units()
@@ -23,11 +25,11 @@ func _ready() -> void:
 	print_controls()
 	
 	await get_tree().create_timer(0.5).timeout
-	test_fov_system()
+	test_los_system()
 
 func setup_scene() -> void:
 	visual_grid = VisualGrid.new()
-	visual_grid.grid_size = Vector2i(42, 21)
+	visual_grid.grid_size = Vector2i(21, 21)
 	add_child(visual_grid)
 	
 	await get_tree().process_frame
@@ -38,7 +40,7 @@ func setup_scene() -> void:
 	add_child(fov_visualizer)
 	
 	grid_manager = GridManager.new()
-	grid_manager.set_grid_bounds(Vector2i(0, 0), Vector2i(42, 21))
+	grid_manager.set_grid_bounds(Vector2i(0, 0), Vector2i(21, 21))
 	add_child(grid_manager)
 	
 	turn_manager = TurnManager.new()
@@ -48,31 +50,47 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	# FELD 1: Kleine Wand bei (10,10)
+	# Spawne 0.8m LOW COVER Wand bei (10,10)
 	spawn_cover(Vector2i(10, 10), "low")
-	
-	# FELD 2: Große Wand bei (31,10) - 21 Tiles nach rechts
-	spawn_cover(Vector2i(31, 10), "high")
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
 	var merc_scene = preload("res://scenes/entities/Merc.tscn")
 	var ivan_data = load("res://resources/mercs/ivan_dolvich.tres")
 	
+	# Player bei (5, 10) - 5 Tiles links von der Wand
 	merc = merc_scene.instantiate()
 	merc.merc_data = ivan_data
 	merc.weapon_data = akm_weapon
 	merc.is_player_unit = true
-	merc.global_position = Vector3(1.5, 0, 8.5)
+	merc.global_position = Vector3(5.5, 0, 10.5)
 	add_child(merc)
+	
+	# Enemy bei (11, 10) - 1 Tile RECHTS hinter der 0.8m Wand
+	enemy = merc_scene.instantiate()
+	enemy.merc_data = ivan_data.duplicate()
+	enemy.merc_data.merc_name = "Enemy Behind Wall"
+	enemy.weapon_data = akm_weapon.duplicate()
+	enemy.is_player_unit = false
+	enemy.global_position = Vector3(11.5, 0, 10.5)
+	add_child(enemy)
+	
+	print("\n>>> SETUP <<<")
+	print("Player: ", merc.merc_data.merc_name, " at (5, 10)")
+	print("Enemy: ", enemy.merc_data.merc_name, " at (11, 10)")
+	print("Wall (0.8m): at (10, 10)")
+	print(">>> END SETUP <<<\n")
 
 func start_game() -> void:
 	await get_tree().process_frame
 	
 	merc.initialize_movement(grid_manager)
-	turn_manager.register_player_unit(merc)
-	turn_manager.start_game()
+	enemy.initialize_movement(grid_manager)
 	
+	turn_manager.register_player_unit(merc)
+	turn_manager.register_enemy_unit(enemy)
+	
+	turn_manager.start_game()
 	ui_panel.update_display(merc)
 	update_fov_visualization()
 
@@ -92,84 +110,54 @@ func spawn_cover(grid_pos: Vector2i, type: String) -> void:
 	await get_tree().process_frame
 	grid_manager.place_cover(grid_pos, cover)
 	
-	var type_name = "SMALL" if type == "low" else "BIG"
+	var type_name = "LOW (0.8m)" if type == "low" else "HIGH (2.5m)"
 	print(type_name, " wall placed at: ", grid_pos)
 
-func test_fov_system() -> void:
+func test_los_system() -> void:
 	print("\n" + "=".repeat(60))
-	print("FOV TEST - Double Field")
+	print("LINE OF SIGHT TEST - Enemy Behind Wall")
 	print("=".repeat(60))
 	
-	print("\nPlayer: ", merc.movement_component.current_grid_pos)
-	print("Facing: ", merc.facing_system.get_facing_angle(), "°")
-	print("Small Wall: (10,10)")
-	print("Big Wall: (31,10)")
+	var player_stance_name = _get_stance_name(merc.stance_system.current_stance)
+	var enemy_stance_name = _get_stance_name(enemy.stance_system.current_stance)
 	
-	print("\n>>> FORCING FOV RECALCULATION WITH DEBUG <<<")
-	merc.update_fov_grid()
+	print("\nPlayer: ", merc.movement_component.current_grid_pos, " (Stance: ", player_stance_name, ")")
+	print("Enemy: ", enemy.movement_component.current_grid_pos, " (Stance: ", enemy_stance_name, ")")
+	print("Wall: (10,10) - Height: 0.8m")
+	print("Player Eye Height: ", merc.stance_system.get_eye_height(), "m")
+	print("Enemy Eye Height: ", enemy.stance_system.get_eye_height(), "m")
 	
-	var clear_tiles = []
-	var partial_tiles = []
-	var blocked_tiles = []
+	print("\n>>> TESTING VISIBILITY <<<")
+	var can_see = merc.can_see_enemy(enemy)
+	print("Can player see enemy? ", can_see)
 	
-	const BLOCKED = 0
-	const PARTIAL = 1
-	const CLEAR = 2
+	if can_see:
+		var visible_parts = merc.get_visible_body_parts(enemy)
+		print("Visible body parts (bitflags): ", visible_parts)
+		print("  HEAD visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.HEAD) != 0)
+		print("  TORSO visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.TORSO) != 0)
+		print("  LEGS visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.LEGS) != 0)
 	
-	for pos in merc.fov_grid:
-		var level = merc.fov_grid[pos]
-		match level:
-			CLEAR:
-				clear_tiles.append(pos)
-			PARTIAL:
-				partial_tiles.append(pos)
-			BLOCKED:
-				blocked_tiles.append(pos)
-	
-	clear_tiles.sort_custom(func(a, b): return a.x < b.x or (a.x == b.x and a.y < b.y))
-	partial_tiles.sort_custom(func(a, b): return a.x < b.x or (a.x == b.x and a.y < b.y))
-	
-	print("\nTotal visible tiles: ", merc.fov_grid.size())
-	print("  CLEAR (GELB): ", clear_tiles.size())
-	print("  PARTIAL (GRÜN): ", partial_tiles.size())
-	print("  BLOCKED (ROT): ", blocked_tiles.size())
-	
-	print("\n--- CLEAR tiles (free sight) ---")
-	_print_tile_list(clear_tiles)
-	
-	print("\n--- PARTIAL tiles (through cover) ---")
-	_print_tile_list(partial_tiles)
-	
-	if blocked_tiles.size() > 0:
-		print("\n--- BLOCKED tiles ---")
-		_print_tile_list(blocked_tiles)
-	
-	print("\n" + "=".repeat(60) + "\n")
+	print(">>> END TEST <<<\n")
+	print("=".repeat(60) + "\n")
 
-func _print_tile_list(tiles: Array) -> void:
-	if tiles.size() == 0:
-		print("  (none)")
-		return
-	
-	var line = "  "
-	for i in range(tiles.size()):
-		line += str(tiles[i])
-		if i < tiles.size() - 1:
-			line += ", "
-		
-		if (i + 1) % 10 == 0 and i < tiles.size() - 1:
-			print(line)
-			line = "  "
-	
-	if line != "  ":
-		print(line)
+func _get_stance_name(stance: StanceSystem.Stance) -> String:
+	match stance:
+		StanceSystem.Stance.STANDING:
+			return "STANDING"
+		StanceSystem.Stance.CROUCHED:
+			return "CROUCHED"
+		StanceSystem.Stance.PRONE:
+			return "PRONE"
+	return "UNKNOWN"
 
 func print_controls() -> void:
 	print("\n=== CONTROLS ===")
 	print("MOVE: Left Click")
 	print("ROTATE: Q (Left) | E (Right)")
 	print("STANCE: 1 (Stand) | 2 (Crouch) | 3 (Prone)")
-	print("DEBUG: T (Test FOV)")
+	print("ENEMY STANCE: 7 (Stand) | 8 (Crouch) | 9 (Prone)")
+	print("DEBUG: T (Test LoS)")
 	print("=".repeat(60) + "\n")
 
 func _input(event: InputEvent) -> void:
@@ -186,31 +174,46 @@ func handle_key_input(key: int) -> void:
 	match key:
 		KEY_Q:
 			if merc.rotate_to_angle(merc.facing_system.get_facing_angle() - 45.0):
-				print("ROTATED LEFT: ", merc.facing_system.get_facing_angle(), "°")
+				print("PLAYER ROTATED LEFT: ", merc.facing_system.get_facing_angle(), "°")
 				update_fov_visualization()
 				ui_panel.update_display(merc)
 		KEY_E:
 			if merc.rotate_to_angle(merc.facing_system.get_facing_angle() + 45.0):
-				print("ROTATED RIGHT: ", merc.facing_system.get_facing_angle(), "°")
+				print("PLAYER ROTATED RIGHT: ", merc.facing_system.get_facing_angle(), "°")
 				update_fov_visualization()
 				ui_panel.update_display(merc)
 		KEY_1:
 			if merc.change_stance(StanceSystem.Stance.STANDING):
-				print("STANCE: STANDING")
+				print("PLAYER STANCE: STANDING")
 				update_fov_visualization()
 				ui_panel.update_display(merc)
+				test_los_system()
 		KEY_2:
 			if merc.change_stance(StanceSystem.Stance.CROUCHED):
-				print("STANCE: CROUCHED")
+				print("PLAYER STANCE: CROUCHED")
 				update_fov_visualization()
 				ui_panel.update_display(merc)
+				test_los_system()
 		KEY_3:
 			if merc.change_stance(StanceSystem.Stance.PRONE):
-				print("STANCE: PRONE")
+				print("PLAYER STANCE: PRONE")
 				update_fov_visualization()
 				ui_panel.update_display(merc)
+				test_los_system()
+		KEY_7:
+			if enemy.change_stance(StanceSystem.Stance.STANDING):
+				print("ENEMY STANCE: STANDING")
+				test_los_system()
+		KEY_8:
+			if enemy.change_stance(StanceSystem.Stance.CROUCHED):
+				print("ENEMY STANCE: CROUCHED")
+				test_los_system()
+		KEY_9:
+			if enemy.change_stance(StanceSystem.Stance.PRONE):
+				print("ENEMY STANCE: PRONE")
+				test_los_system()
 		KEY_T:
-			test_fov_system()
+			test_los_system()
 		KEY_SPACE:
 			turn_manager.end_turn()
 			await get_tree().create_timer(0.5).timeout
@@ -227,9 +230,10 @@ func handle_click() -> void:
 	if intersection:
 		var grid_pos = grid_manager.world_to_grid(intersection)
 		if merc.can_move_to_grid(grid_pos) and merc.move_to_grid(grid_pos):
-			print("MOVED: ", grid_pos)
+			print("PLAYER MOVED: ", grid_pos)
 			update_fov_visualization()
 			ui_panel.update_display(merc)
+			test_los_system()
 
 func update_fov_visualization() -> void:
 	for child in fov_visualizer.get_children():

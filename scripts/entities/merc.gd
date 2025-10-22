@@ -14,6 +14,7 @@ class_name Merc
 @onready var status_effect_system: StatusEffectSystem = $StatusEffectSystem
 @onready var stance_system: StanceSystem = $StanceSystem
 @onready var facing_system: FacingSystem = $FacingSystem
+@onready var line_of_sight_system: LineOfSightSystem = $LineOfSightSystem
 
 const FOVGridSystem = preload("res://scripts/systems/fov_grid_system.gd")
 
@@ -37,12 +38,43 @@ func initialize() -> void:
 	status_effect_system.initialize(self)
 	stance_system.initialize(self)
 	facing_system.initialize(self)
+	line_of_sight_system.initialize(self)
 	
 	health_component.set_status_effect_system(status_effect_system)
 	visual_component.set_team_color(is_player_unit)
 	
+	# WICHTIG: Dupliziere Mesh für jede Unit-Instanz!
+	_duplicate_mesh()
+	
 	if weapon_data:
 		combat_component.initialize(self, weapon_data, action_point_component)
+
+func _duplicate_mesh() -> void:
+	# Hole Model MeshInstance
+	var visual_root = get_node_or_null("VisualRoot")
+	if not visual_root:
+		print("[Merc] WARNING: VisualRoot not found!")
+		return
+	
+	var model_mesh = visual_root.get_node_or_null("Model")
+	if not model_mesh or not model_mesh is MeshInstance3D:
+		print("[Merc] WARNING: Model MeshInstance3D not found!")
+		return
+	
+	# Dupliziere die Mesh Resource
+	if model_mesh.mesh:
+		model_mesh.mesh = model_mesh.mesh.duplicate()
+		print("[Merc] ", merc_data.merc_name, " - Mesh duplicated successfully")
+	else:
+		print("[Merc] WARNING: Model has no mesh!")
+	
+	# Dupliziere auch die CollisionShape
+	var collision_shape = get_node_or_null("CollisionShape3D")
+	if collision_shape and collision_shape.shape:
+		collision_shape.shape = collision_shape.shape.duplicate()
+		print("[Merc] ", merc_data.merc_name, " - CollisionShape duplicated successfully")
+	else:
+		print("[Merc] WARNING: CollisionShape3D not found!")
 
 func initialize_movement(grid_manager: GridManager) -> void:
 	grid_manager_ref = grid_manager
@@ -56,6 +88,23 @@ func update_fov_grid() -> void:
 	if grid_manager_ref:
 		fov_grid = FOVGridSystem.calculate_fov_grid(self, grid_manager_ref)
 		print(merc_data.merc_name, " FOV updated. Visible tiles: ", fov_grid.size())
+		
+		# Invalidate LoS cache when FOV changes
+		line_of_sight_system.invalidate_cache()
+		
+		# WICHTIG: Invalidiere ALLE anderen Mercs' LoS-Caches!
+		_invalidate_all_los_caches()
+
+func _invalidate_all_los_caches() -> void:
+	# Wenn sich DIESE Unit ändert, müssen alle anderen Units
+	# ihre LoS-Caches neu berechnen, weil DIESE Unit jetzt woanders ist!
+	var scene_root = get_parent()
+	if not scene_root:
+		return
+	
+	for node in scene_root.get_children():
+		if node is Merc and node != self:
+			node.line_of_sight_system.invalidate_cache()
 
 func can_see_position(target_pos: Vector2i) -> bool:
 	if not fov_grid.has(target_pos):
@@ -66,6 +115,12 @@ func get_visibility_level(target_pos: Vector2i) -> int:
 	if not fov_grid.has(target_pos):
 		return FOVGridSystem.VisibilityLevel.BLOCKED
 	return fov_grid[target_pos]
+
+func can_see_enemy(target: Merc) -> bool:
+	return line_of_sight_system.can_see_enemy(target)
+
+func get_visible_body_parts(target: Merc) -> int:
+	return line_of_sight_system.get_visible_body_parts(target)
 
 func start_turn() -> void:
 	action_point_component.reset_ap()
