@@ -7,10 +7,11 @@ var turn_manager: TurnManager
 var visual_grid: VisualGrid
 var ui_panel: UnitInfoPanel
 var fov_visualizer: Node3D
+var fow_system: FogOfWarSystem  # ← NEU: FOW System
 
 func _ready() -> void:
 	print("\n" + "=".repeat(60))
-	print("LINE OF SIGHT RAYCAST TEST")
+	print("LINE OF SIGHT RAYCAST TEST WITH FOG OF WAR")
 	print("Enemy behind 0.8m wall - Testing visibility")
 	print("=".repeat(60))
 	
@@ -45,6 +46,15 @@ func setup_scene() -> void:
 	
 	turn_manager = TurnManager.new()
 	add_child(turn_manager)
+	
+	# ← NEU: FOW System initialisieren
+	fow_system = FogOfWarSystem.new()
+	fow_system.debug_mode = true
+	add_child(fow_system)
+	
+	# ← NEU: FOW Signals verbinden
+	fow_system.enemy_revealed.connect(_on_enemy_revealed)
+	fow_system.enemy_hidden.connect(_on_enemy_hidden)
 	
 	var ui_scene = preload("res://scenes/ui/unit_info_panel.tscn")
 	ui_panel = ui_scene.instantiate()
@@ -90,9 +100,16 @@ func start_game() -> void:
 	turn_manager.register_player_unit(merc)
 	turn_manager.register_enemy_unit(enemy)
 	
+	# ← NEU: Units im FOW System registrieren
+	fow_system.register_player_unit(merc)
+	fow_system.register_enemy_unit(enemy)
+	
 	turn_manager.start_game()
 	ui_panel.update_display(merc)
 	update_fov_visualization()
+	
+	# ← NEU: Initiales FOW Update
+	update_fog_of_war()
 
 func spawn_cover(grid_pos: Vector2i, type: String) -> void:
 	var cover_scene = preload("res://scenes/entities/CoverObject.tscn")
@@ -112,6 +129,23 @@ func spawn_cover(grid_pos: Vector2i, type: String) -> void:
 	
 	var type_name = "LOW (0.8m)" if type == "low" else "HIGH (2.5m)"
 	print(type_name, " wall placed at: ", grid_pos)
+
+# ← NEU: FOW Update Funktion
+func update_fog_of_war() -> void:
+	"""Update FOW and apply visibility to enemies"""
+	fow_system.update_visibility()
+	fow_system.apply_visibility_to_scene()
+	
+	# Debug output
+	print("\n[FOW UPDATE]")
+	print("  Enemy visible: %s" % fow_system.is_enemy_visible(enemy))
+	
+	var stats = fow_system.get_visibility_stats()
+	print("  Stats: %d/%d enemies visible (%.0f%%)" % [
+		stats.visible,
+		stats.total_enemies,
+		stats.visibility_rate * 100.0
+	])
 
 func test_los_system() -> void:
 	print("\n" + "=".repeat(60))
@@ -138,6 +172,10 @@ func test_los_system() -> void:
 		print("  TORSO visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.TORSO) != 0)
 		print("  LEGS visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.LEGS) != 0)
 	
+	# ← NEU: FOW Status anzeigen
+	print("\n>>> FOG OF WAR STATUS <<<")
+	print("Enemy is %s in FOW" % ("VISIBLE" if fow_system.is_enemy_visible(enemy) else "HIDDEN"))
+	
 	print(">>> END TEST <<<\n")
 	print("=".repeat(60) + "\n")
 
@@ -157,7 +195,8 @@ func print_controls() -> void:
 	print("ROTATE: Q (Left) | E (Right)")
 	print("STANCE: 1 (Stand) | 2 (Crouch) | 3 (Prone)")
 	print("ENEMY STANCE: 7 (Stand) | 8 (Crouch) | 9 (Prone)")
-	print("DEBUG: T (Test LoS)")
+	print("DEBUG: T (Test LoS) | F (FOW Debug)")  # ← NEU: F für FOW Debug
+	print("\nNOTE: Enemy capsule will be HIDDEN when not visible!")  # ← NEU
 	print("=".repeat(60) + "\n")
 
 func _input(event: InputEvent) -> void:
@@ -176,44 +215,54 @@ func handle_key_input(key: int) -> void:
 			if merc.rotate_to_angle(merc.facing_system.get_facing_angle() - 45.0):
 				print("PLAYER ROTATED LEFT: ", merc.facing_system.get_facing_angle(), "°")
 				update_fov_visualization()
+				update_fog_of_war()  # ← NEU: FOW Update
 				ui_panel.update_display(merc)
 		KEY_E:
 			if merc.rotate_to_angle(merc.facing_system.get_facing_angle() + 45.0):
 				print("PLAYER ROTATED RIGHT: ", merc.facing_system.get_facing_angle(), "°")
 				update_fov_visualization()
+				update_fog_of_war()  # ← NEU: FOW Update
 				ui_panel.update_display(merc)
 		KEY_1:
 			if merc.change_stance(StanceSystem.Stance.STANDING):
 				print("PLAYER STANCE: STANDING")
 				update_fov_visualization()
+				update_fog_of_war()  # ← NEU: FOW Update
 				ui_panel.update_display(merc)
 				test_los_system()
 		KEY_2:
 			if merc.change_stance(StanceSystem.Stance.CROUCHED):
 				print("PLAYER STANCE: CROUCHED")
 				update_fov_visualization()
+				update_fog_of_war()  # ← NEU: FOW Update
 				ui_panel.update_display(merc)
 				test_los_system()
 		KEY_3:
 			if merc.change_stance(StanceSystem.Stance.PRONE):
 				print("PLAYER STANCE: PRONE")
 				update_fov_visualization()
+				update_fog_of_war()  # ← NEU: FOW Update
 				ui_panel.update_display(merc)
 				test_los_system()
 		KEY_7:
 			if enemy.change_stance(StanceSystem.Stance.STANDING):
 				print("ENEMY STANCE: STANDING")
+				update_fog_of_war()  # ← NEU: FOW Update
 				test_los_system()
 		KEY_8:
 			if enemy.change_stance(StanceSystem.Stance.CROUCHED):
 				print("ENEMY STANCE: CROUCHED")
+				update_fog_of_war()  # ← NEU: FOW Update
 				test_los_system()
 		KEY_9:
 			if enemy.change_stance(StanceSystem.Stance.PRONE):
 				print("ENEMY STANCE: PRONE")
+				update_fog_of_war()  # ← NEU: FOW Update
 				test_los_system()
 		KEY_T:
 			test_los_system()
+		KEY_F:  # ← NEU: FOW Debug
+			fow_system.debug_print_visibility()
 		KEY_SPACE:
 			turn_manager.end_turn()
 			await get_tree().create_timer(0.5).timeout
@@ -232,6 +281,7 @@ func handle_click() -> void:
 		if merc.can_move_to_grid(grid_pos) and merc.move_to_grid(grid_pos):
 			print("PLAYER MOVED: ", grid_pos)
 			update_fov_visualization()
+			update_fog_of_war()  # ← NEU: FOW Update
 			ui_panel.update_display(merc)
 			test_los_system()
 
@@ -296,3 +346,10 @@ func _draw_tile(mesh: ImmediateMesh, grid_pos: Vector2i, color: Color) -> void:
 	mesh.surface_add_vertex(br)
 	mesh.surface_set_color(color)
 	mesh.surface_add_vertex(bl)
+
+# ← NEU: FOW Signal Callbacks
+func _on_enemy_revealed(enemy_unit: Merc) -> void:
+	print("\n🔍 ENEMY REVEALED: %s" % enemy_unit.merc_data.merc_name)
+
+func _on_enemy_hidden(enemy_unit: Merc) -> void:
+	print("\n🌫️  ENEMY HIDDEN: %s" % enemy_unit.merc_data.merc_name)
