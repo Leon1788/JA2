@@ -2,7 +2,6 @@
 ## Manages enemy visibility based on player's FOV and Line of Sight
 ## Enemies are ONLY visible when currently seen by a player unit
 ## No memory - pure real-time visibility!
-
 class_name FogOfWarSystem
 extends Node
 
@@ -73,7 +72,13 @@ func update_visibility() -> void:
 	
 	# Check each player's FOV/LoS
 	for player in player_units:
+		if not player or not is_instance_valid(player):
+			continue
+			
 		for enemy in enemy_units:
+			if not enemy or not is_instance_valid(enemy):
+				continue
+				
 			# Skip if already visible (no need to check again)
 			if visible_enemies[enemy]:
 				continue
@@ -125,9 +130,9 @@ func apply_visibility_to_scene() -> void:
 	for enemy in enemy_units:
 		var should_be_visible = visible_enemies.get(enemy, false)
 		
-		# Hide/show the mesh
-		if enemy.has_node("MeshInstance3D"):
-			enemy.get_node("MeshInstance3D").visible = should_be_visible
+		# KORREKT: Delegiere die Sichtbarkeit an die Merc-Instanz
+		if enemy and is_instance_valid(enemy):
+			enemy.set_visibility(should_be_visible)
 		
 		# Keep CollisionShape always active for physics
 		# (so raycasts still work even when invisible)

@@ -1,7 +1,13 @@
 extends Node3D
 
 var merc: Merc
-var enemy: Merc
+# var enemy: Merc # Ersetzt durch mehrere Gegner
+var enemy1: Merc
+var enemy2: Merc
+var enemy3: Merc
+var enemy4: Merc
+var all_enemies: Array[Merc] = []
+
 var grid_manager: GridManager
 var turn_manager: TurnManager
 var visual_grid: VisualGrid
@@ -11,8 +17,8 @@ var fow_system: FogOfWarSystem  # ← NEU: FOW System
 
 func _ready() -> void:
 	print("\n" + "=".repeat(60))
-	print("LINE OF SIGHT RAYCAST TEST WITH FOG OF WAR")
-	print("Enemy behind 0.8m wall - Testing visibility")
+	print("FOW LABYRINTH TEST")
+	print("Testing FOW/LoS with multiple enemies and complex cover")
 	print("=".repeat(60))
 	
 	var camera = get_node("Camera3D")
@@ -26,11 +32,13 @@ func _ready() -> void:
 	print_controls()
 	
 	await get_tree().create_timer(0.5).timeout
-	test_los_system()
+	test_los_system() # Testet jetzt gegen Enemy1
 
 func setup_scene() -> void:
+	# Grid vergrößert, um Platz für Labyrinth zu schaffen
+	var grid_s = 21
 	visual_grid = VisualGrid.new()
-	visual_grid.grid_size = Vector2i(21, 21)
+	visual_grid.grid_size = Vector2i(grid_s, grid_s)
 	add_child(visual_grid)
 	
 	await get_tree().process_frame
@@ -41,7 +49,7 @@ func setup_scene() -> void:
 	add_child(fov_visualizer)
 	
 	grid_manager = GridManager.new()
-	grid_manager.set_grid_bounds(Vector2i(0, 0), Vector2i(21, 21))
+	grid_manager.set_grid_bounds(Vector2i(0, 0), Vector2i(grid_s, grid_s))
 	add_child(grid_manager)
 	
 	turn_manager = TurnManager.new()
@@ -60,49 +68,121 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	# Spawne 0.8m LOW COVER Wand bei (10,10)
-	spawn_cover(Vector2i(10, 10), "low")
+	# --- Labyrinth Setup ---
+	print("Building labyrinth...")
+	
+	# Lange vertikale Wand (HOCH)
+	for i in range(2, 16):
+		spawn_cover(Vector2i(7, i), "high")
+		
+	# Lange horizontale Wand (HOCH)
+	for i in range(8, 16):
+		spawn_cover(Vector2i(i, 15), "high")
+
+	# Untere horizontale Wand (NIEDRIG)
+	for i in range(2, 10):
+		spawn_cover(Vector2i(i, 8), "low")
+		
+	# Mittlere Box (NIEDRIG)
+	spawn_cover(Vector2i(10, 12), "low")
+
+	# Obere Gasse (NIEDRIG)
+	spawn_cover(Vector2i(13, 18), "low")
+	spawn_cover(Vector2i(15, 18), "low")
+	spawn_cover(Vector2i(16, 18), "low")
+
+	# Gegner-Nest 1 (HOCH)
+	spawn_cover(Vector2i(10, 4), "high")
+	spawn_cover(Vector2i(11, 4), "high")
+	spawn_cover(Vector2i(10, 5), "high")
+	
+	# Gegner-Nest 2 (NIEDRIG)
+	spawn_cover(Vector2i(17, 3), "low")
+	spawn_cover(Vector2i(18, 3), "high") # Eine hohe Wand
+	spawn_cover(Vector2i(17, 4), "low")
+	
+	print("Labyrinth built.")
+	# --- Ende Labyrinth ---
+
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
 	var merc_scene = preload("res://scenes/entities/Merc.tscn")
 	var ivan_data = load("res://resources/mercs/ivan_dolvich.tres")
 	
-	# Player bei (5, 10) - 5 Tiles links von der Wand
+	# Player bei (2, 18) - Start-Ecke
 	merc = merc_scene.instantiate()
 	merc.merc_data = ivan_data
 	merc.weapon_data = akm_weapon
 	merc.is_player_unit = true
-	merc.global_position = Vector3(5.5, 0, 10.5)
+	merc.global_position = Vector3(2.5, 0, 18.5)
 	add_child(merc)
 	
-	# Enemy bei (11, 10) - 1 Tile RECHTS hinter der 0.8m Wand
-	enemy = merc_scene.instantiate()
-	enemy.merc_data = ivan_data.duplicate()
-	enemy.merc_data.merc_name = "Enemy Behind Wall"
-	enemy.weapon_data = akm_weapon.duplicate()
-	enemy.is_player_unit = false
-	enemy.global_position = Vector3(11.5, 0, 10.5)
-	add_child(enemy)
+	# --- Gegner Setup ---
+	
+	# Enemy 1 bei (10, 10) - HINTER NIEDRIGER DECKUNG (HOCKEND)
+	enemy1 = merc_scene.instantiate()
+	enemy1.merc_data = ivan_data.duplicate()
+	enemy1.merc_data.merc_name = "Enemy 1 (Crouched)"
+	enemy1.weapon_data = akm_weapon.duplicate()
+	enemy1.is_player_unit = false
+	enemy1.global_position = Vector3(10.5, 0, 10.5)
+	add_child(enemy1)
+	
+	# Enemy 2 bei (17, 3) - IM NEST (LIEGEND)
+	enemy2 = merc_scene.instantiate()
+	enemy2.merc_data = ivan_data.duplicate()
+	enemy2.merc_data.merc_name = "Enemy 2 (Prone)"
+	enemy2.weapon_data = akm_weapon.duplicate()
+	enemy2.is_player_unit = false
+	enemy2.global_position = Vector3(17.5, 0, 3.5) # In der 17,3 / 17,4 Deckung
+	add_child(enemy2)
+	
+	# Enemy 3 bei (19, 19) - OBEN RECHTS (STEHEND)
+	enemy3 = merc_scene.instantiate()
+	enemy3.merc_data = ivan_data.duplicate()
+	enemy3.merc_data.merc_name = "Enemy 3 (Standing)"
+	enemy3.weapon_data = akm_weapon.duplicate()
+	enemy3.is_player_unit = false
+	enemy3.global_position = Vector3(19.5, 0, 19.5)
+	add_child(enemy3)
+	
+	# Enemy 4 bei (10, 5) - IM HOHEN NEST (STEHEND)
+	enemy4 = merc_scene.instantiate()
+	enemy4.merc_data = ivan_data.duplicate()
+	enemy4.merc_data.merc_name = "Enemy 4 (High Cover)"
+	enemy4.weapon_data = akm_weapon.duplicate()
+	enemy4.is_player_unit = false
+	enemy4.global_position = Vector3(10.5, 0, 5.5) # In der 10,5 Deckung
+	add_child(enemy4)
+	
+	# Sammeln für einfaches Management
+	all_enemies = [enemy1, enemy2, enemy3, enemy4]
 	
 	print("\n>>> SETUP <<<")
-	print("Player: ", merc.merc_data.merc_name, " at (5, 10)")
-	print("Enemy: ", enemy.merc_data.merc_name, " at (11, 10)")
-	print("Wall (0.8m): at (10, 10)")
+	print("Player: ", merc.merc_data.merc_name, " at (2, 18)")
+	print("Enemy 1: ", enemy1.merc_data.merc_name, " at (10, 10) [CROUCHED]")
+	print("Enemy 2: ", enemy2.merc_data.merc_name, " at (17, 3) [PRONE]")
+	print("Enemy 3: ", enemy3.merc_data.merc_name, " at (19, 19) [STANDING]")
+	print("Enemy 4: ", enemy4.merc_data.merc_name, " at (10, 5) [STANDING]")
 	print(">>> END SETUP <<<\n")
 
 func start_game() -> void:
 	await get_tree().process_frame
 	
 	merc.initialize_movement(grid_manager)
-	enemy.initialize_movement(grid_manager)
-	
 	turn_manager.register_player_unit(merc)
-	turn_manager.register_enemy_unit(enemy)
-	
-	# ← NEU: Units im FOW System registrieren
 	fow_system.register_player_unit(merc)
-	fow_system.register_enemy_unit(enemy)
+	
+	# Alle Gegner initialisieren und registrieren
+	for enemy_unit in all_enemies:
+		enemy_unit.initialize_movement(grid_manager)
+		turn_manager.register_enemy_unit(enemy_unit)
+		fow_system.register_enemy_unit(enemy_unit)
+	
+	# Setze Stances NACH dem Initialisieren
+	enemy1.change_stance(StanceSystem.Stance.CROUCHED)
+	enemy2.change_stance(StanceSystem.Stance.PRONE)
 	
 	turn_manager.start_game()
 	ui_panel.update_display(merc)
@@ -115,20 +195,25 @@ func spawn_cover(grid_pos: Vector2i, type: String) -> void:
 	var cover_scene = preload("res://scenes/entities/CoverObject.tscn")
 	var cover = cover_scene.instantiate()
 	
-	if type == "low":
-		cover.cover_data = load("res://resources/cover/crate_low.tres")
-	else:
-		cover.cover_data = load("res://resources/cover/wall_high.tres")
+	var cover_resource_path = "res://resources/cover/crate_low.tres" if type == "low" else "res://resources/cover/wall_high.tres"
+	cover.cover_data = load(cover_resource_path)
 	
 	cover.grid_position = grid_pos
-	cover.global_position = grid_manager.grid_to_world(grid_pos)
 	
+	# ===== KORREKTUR =====
+	# 1. ERST HINZUFÜGEN
 	add_child(cover)
+	
+	# 2. DANN GLOBALE POSITION SETZEN
+	cover.global_position = grid_manager.grid_to_world(grid_pos)
+	# =====================
+	
 	await get_tree().process_frame
 	grid_manager.place_cover(grid_pos, cover)
 	
-	var type_name = "LOW (0.8m)" if type == "low" else "HIGH (2.5m)"
-	print(type_name, " wall placed at: ", grid_pos)
+	# Mache den Output leiser, damit wir die FOW-Tests sehen
+	# var type_name = "LOW (0.8m)" if type == "low" else "HIGH (2.5m)"
+	# print(type_name, " wall placed at: ", grid_pos)
 
 # ← NEU: FOW Update Funktion
 func update_fog_of_war() -> void:
@@ -138,7 +223,7 @@ func update_fog_of_war() -> void:
 	
 	# Debug output
 	print("\n[FOW UPDATE]")
-	print("  Enemy visible: %s" % fow_system.is_enemy_visible(enemy))
+	# print("  Enemy visible: %s" % fow_system.is_enemy_visible(enemy1)) # Veraltet
 	
 	var stats = fow_system.get_visibility_stats()
 	print("  Stats: %d/%d enemies visible (%.0f%%)" % [
@@ -149,32 +234,32 @@ func update_fog_of_war() -> void:
 
 func test_los_system() -> void:
 	print("\n" + "=".repeat(60))
-	print("LINE OF SIGHT TEST - Enemy Behind Wall")
+	print("LINE OF SIGHT TEST - (Testing vs Enemy 1)")
 	print("=".repeat(60))
 	
 	var player_stance_name = _get_stance_name(merc.stance_system.current_stance)
-	var enemy_stance_name = _get_stance_name(enemy.stance_system.current_stance)
+	var enemy_stance_name = _get_stance_name(enemy1.stance_system.current_stance) # Testet gegen Enemy1
 	
 	print("\nPlayer: ", merc.movement_component.current_grid_pos, " (Stance: ", player_stance_name, ")")
-	print("Enemy: ", enemy.movement_component.current_grid_pos, " (Stance: ", enemy_stance_name, ")")
-	print("Wall: (10,10) - Height: 0.8m")
+	print("Enemy 1: ", enemy1.movement_component.current_grid_pos, " (Stance: ", enemy_stance_name, ")")
+	# print("Wall: (10,10) - Height: 0.8m") # Veraltet
 	print("Player Eye Height: ", merc.stance_system.get_eye_height(), "m")
-	print("Enemy Eye Height: ", enemy.stance_system.get_eye_height(), "m")
+	print("Enemy 1 Eye Height: ", enemy1.stance_system.get_eye_height(), "m")
 	
 	print("\n>>> TESTING VISIBILITY <<<")
-	var can_see = merc.can_see_enemy(enemy)
-	print("Can player see enemy? ", can_see)
+	var can_see = merc.can_see_enemy(enemy1) # Testet gegen Enemy1
+	print("Can player see enemy 1? ", can_see)
 	
 	if can_see:
-		var visible_parts = merc.get_visible_body_parts(enemy)
+		var visible_parts = merc.get_visible_body_parts(enemy1) # Testet gegen Enemy1
 		print("Visible body parts (bitflags): ", visible_parts)
 		print("  HEAD visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.HEAD) != 0)
 		print("  TORSO visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.TORSO) != 0)
 		print("  LEGS visible: ", (visible_parts & LineOfSightSystem.BodyPartVisibility.LEGS) != 0)
 	
 	# ← NEU: FOW Status anzeigen
-	print("\n>>> FOG OF WAR STATUS <<<")
-	print("Enemy is %s in FOW" % ("VISIBLE" if fow_system.is_enemy_visible(enemy) else "HIDDEN"))
+	print("\n>>> FOG OF WAR STATUS (Enemy 1) <<<")
+	print("Enemy 1 is %s in FOW" % ("VISIBLE" if fow_system.is_enemy_visible(enemy1) else "HIDDEN"))
 	
 	print(">>> END TEST <<<\n")
 	print("=".repeat(60) + "\n")
@@ -194,9 +279,9 @@ func print_controls() -> void:
 	print("MOVE: Left Click")
 	print("ROTATE: Q (Left) | E (Right)")
 	print("STANCE: 1 (Stand) | 2 (Crouch) | 3 (Prone)")
-	print("ENEMY STANCE: 7 (Stand) | 8 (Crouch) | 9 (Prone)")
-	print("DEBUG: T (Test LoS) | F (FOW Debug)")  # ← NEU: F für FOW Debug
-	print("\nNOTE: Enemy capsule will be HIDDEN when not visible!")  # ← NEU
+	print("ENEMY 1 STANCE: 7 (Stand) | 8 (Crouch) | 9 (Prone)") # Aktualisiert
+	print("DEBUG: T (Test LoS vs Enemy 1) | F (FOW Debug)")  # ← NEU: F für FOW Debug
+	print("\nNOTE: Enemy capsules will be HIDDEN when not visible!")  # ← NEU
 	print("=".repeat(60) + "\n")
 
 func _input(event: InputEvent) -> void:
@@ -245,18 +330,18 @@ func handle_key_input(key: int) -> void:
 				ui_panel.update_display(merc)
 				test_los_system()
 		KEY_7:
-			if enemy.change_stance(StanceSystem.Stance.STANDING):
-				print("ENEMY STANCE: STANDING")
+			if enemy1.change_stance(StanceSystem.Stance.STANDING): # Steuert Enemy1
+				print("ENEMY 1 STANCE: STANDING")
 				update_fog_of_war()  # ← NEU: FOW Update
 				test_los_system()
 		KEY_8:
-			if enemy.change_stance(StanceSystem.Stance.CROUCHED):
-				print("ENEMY STANCE: CROUCHED")
+			if enemy1.change_stance(StanceSystem.Stance.CROUCHED): # Steuert Enemy1
+				print("ENEMY 1 STANCE: CROUCHED")
 				update_fog_of_war()  # ← NEU: FOW Update
 				test_los_system()
 		KEY_9:
-			if enemy.change_stance(StanceSystem.Stance.PRONE):
-				print("ENEMY STANCE: PRONE")
+			if enemy1.change_stance(StanceSystem.Stance.PRONE): # Steuert Enemy1
+				print("ENEMY 1 STANCE: PRONE")
 				update_fog_of_war()  # ← NEU: FOW Update
 				test_los_system()
 		KEY_T:
@@ -315,9 +400,11 @@ func update_fov_visualization() -> void:
 			BLOCKED:
 				continue
 			PARTIAL:
-				color = Color(0.0, 1.0, 0.0, 0.4)
+				# color = Color(0.0, 1.0, 0.0, 0.4) # Original Grün
+				color = Color(1.0, 1.0, 0.0, 0.4) # Gelb für PARTIAL
 			CLEAR:
-				color = Color(1.0, 1.0, 0.0, 0.4)
+				# color = Color(1.0, 1.0, 0.0, 0.4) # Original Gelb
+				color = Color(0.0, 1.0, 0.0, 0.4) # Grün für CLEAR
 		
 		_draw_tile(immediate_mesh, pos, color)
 	

@@ -198,3 +198,7 @@ func on_death() -> void:
 
 func set_dead_visual() -> void:
 	visual_component.set_dead_visual()
+
+func set_visibility(visible: bool) -> void:
+	if visual_component:
+		visual_component.set_visibility(visible)

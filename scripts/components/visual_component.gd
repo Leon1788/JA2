@@ -40,3 +40,11 @@ func play_muzzle_flash() -> void:
 func play_hit_effect(hit_position: Vector3, body_part: String) -> void:
 	# Placeholder - später Blut/Treffer-Effekt
 	print("HIT EFFECT at ", hit_position, " on ", body_part)
+
+func set_visibility(visible: bool) -> void:
+	if visual_root:
+		visual_root.visible = visible
+	else:
+		# Fallback, falls nur das Modell gefunden wird (sollte aber nicht passieren)
+		if model_mesh:
+			model_mesh.visible = visible
