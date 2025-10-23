@@ -1,15 +1,17 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
-[ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1"]
-[ext_resource type="Texture2D" path="res://assets/textures/WAR181826587-612x612.jpg" id="2"]
+[ext_resource type="Script" path="res://scripts/ui/main_menu.gd" id="1_cxdq3"]
+[ext_resource type="Texture2D" path="res://assets/textures/WAR181826587-612x612.jpg" id="2_2t2a7"]
+[ext_resource type="Texture2D" path="res://assets/textures/Name.png" id="3_abcde"] ; ID kann anders sein!
 
 [node name="MainMenu" type="Control"]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1")
+script = ExtResource("1_cxdq3")
 
 [node name="BackgroundTexture" type="TextureRect" parent="."]
 layout_mode = 1
@@ -18,19 +20,32 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("2")
+texture = ExtResource("2_2t2a7")
 expand_mode = 1
+stretch_mode = 6
 
-[node name="Panel" type="Panel" parent="."]
+[node name="TitleImage" type="TextureRect" parent="."]
+visible = true
+layout_mode = 1
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 320.0 # Breite 300px
+offset_bottom = 120.0 # Höhe 100px
+texture = ExtResource("3_abcde")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Panel" type="Panel" parent="."] ; ### KORREKTE HIERARCHIE START ###
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-self_modulate = Color(1, 1, 1, 0.5)
+self_modulate = Color(1, 1, 1, 0)
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"] ; ### KIND VON PANEL ###
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -45,27 +60,22 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 15
 
-[node name="Label" type="Label" parent="Panel/VBoxContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 64
-text = "Broken Spear"
-horizontal_alignment = 1
-
-[node name="HSeparator" type="HSeparator" parent="Panel/VBoxContainer"]
+[node name="HSeparator" type="HSeparator" parent="Panel/VBoxContainer"] ; ### KIND VON VBOXCONTAINER ###
 layout_mode = 2
 
-[node name="StartButton" type="Button" parent="Panel/VBoxContainer"]
+[node name="StartButton" type="Button" parent="Panel/VBoxContainer"] ; ### KIND VON VBOXCONTAINER ###
 layout_mode = 2
 text = "Start"
 
-[node name="LoadButton" type="Button" parent="Panel/VBoxContainer"]
+[node name="LoadButton" type="Button" parent="Panel/VBoxContainer"] ; ### KIND VON VBOXCONTAINER ###
 layout_mode = 2
 text = "Laden"
 
-[node name="OptionsButton" type="Button" parent="Panel/VBoxContainer"]
+[node name="OptionsButton" type="Button" parent="Panel/VBoxContainer"] ; ### KIND VON VBOXCONTAINER ###
 layout_mode = 2
 text = "Optionen"
 
-[node name="QuitButton" type="Button" parent="Panel/VBoxContainer"]
+[node name="QuitButton" type="Button" parent="Panel/VBoxContainer"] ; ### KIND VON VBOXCONTAINER ###
 layout_mode = 2
 text = "Ende"
+; ### KORREKTE HIERARCHIE ENDE ###
