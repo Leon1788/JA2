@@ -3,8 +3,11 @@ class_name VisualGrid
 
 @export var grid_size: Vector2i = Vector2i(10, 10)
 @export var tile_size: float = 1.0
+@export var floor: int = 0  # Etage (0-4)
+@export var grid_position: Vector2i = Vector2i(0, 0)  # Grid-Position (Offset)
 
 var mesh_instance: MeshInstance3D
+var floor_height: float = 3.0
 
 func _ready() -> void:
 	create_grid_visual()
@@ -25,20 +28,27 @@ func create_grid_visual() -> void:
 	
 	immediate_mesh.surface_begin(Mesh.PRIMITIVE_LINES)
 	
-	# Vertikale Linien
+	# Berechne Positionen
+	var y_height = floor * floor_height + 0.05
+	var x_offset = grid_position.x * tile_size
+	var z_offset = grid_position.y * tile_size
+	
+	# Vertikale Linien (X-Richtung)
 	for x in range(grid_size.x + 1):
-		var start = Vector3(x * tile_size, 0.05, 0)
-		var end = Vector3(x * tile_size, 0.05, grid_size.y * tile_size)
+		var start = Vector3(x_offset + x * tile_size, y_height, z_offset)
+		var end = Vector3(x_offset + x * tile_size, y_height, z_offset + grid_size.y * tile_size)
 		immediate_mesh.surface_add_vertex(start)
 		immediate_mesh.surface_add_vertex(end)
 	
-	# Horizontale Linien
-	for y in range(grid_size.y + 1):
-		var start = Vector3(0, 0.05, y * tile_size)
-		var end = Vector3(grid_size.x * tile_size, 0.05, y * tile_size)
+	# Horizontale Linien (Z-Richtung)
+	for z in range(grid_size.y + 1):
+		var start = Vector3(x_offset, y_height, z_offset + z * tile_size)
+		var end = Vector3(x_offset + grid_size.x * tile_size, y_height, z_offset + z * tile_size)
 		immediate_mesh.surface_add_vertex(start)
 		immediate_mesh.surface_add_vertex(end)
 	
 	immediate_mesh.surface_end()
 	
-	print("Visual Grid created: ", grid_size.x, "x", grid_size.y)
+	print("[VisualGrid] Floor %d: %dx%d Grid at (%d,%d) Height: %.1fm" % [
+		floor, grid_size.x, grid_size.y, grid_position.x, grid_position.y, y_height
+	])

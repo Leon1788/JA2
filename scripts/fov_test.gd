@@ -9,21 +9,21 @@ var all_enemies: Array[Merc] = []
 
 var grid_manager: GridManager
 var turn_manager: TurnManager
-var visual_grid: VisualGrid
+var visual_grids: Array[VisualGrid] = []
 var ui_panel: UnitInfoPanel
 var fov_visualizer: Node3D
 var fow_system: FogOfWarSystem
 
 func _ready() -> void:
 	print("\n" + "=".repeat(70))
-	print("FOV TEST - CROSS LAYOUT (Floor 0 Center + 4 Etagen am Rand)")
+	print("FOV TEST - CLEAN LAYOUT (5x 10x10 Grids - Floors 0-4)")
 	print("=".repeat(70))
 	
 	var camera = get_node("Camera3D")
 	if camera:
-		# Isometrische 2.5D Perspektive - höher und weiter weg um Floor 4 zu sehen
-		camera.position = Vector3(10, 22, 22)
-		camera.look_at(Vector3(10, 6, 10))
+		# Isometrische 2.5D Perspektive
+		camera.position = Vector3(5, 20, 20)
+		camera.look_at(Vector3(5, 5, 5))
 	
 	setup_scene()
 	setup_units()
@@ -34,21 +34,44 @@ func _ready() -> void:
 	test_los_system()
 
 func setup_scene() -> void:
-	# Cross Layout: Floor 0 Center (10x10) + 4 Etagen rundherum
-	var grid_s = 20
-	visual_grid = VisualGrid.new()
-	visual_grid.grid_size = Vector2i(grid_s, grid_s)
-	add_child(visual_grid)
+	print("\n[SETUP] Creating 5x 10x10 Grids (Floors 0-4) NEBENEINANDER...")
+	
+	# Grids nebeneinander angeordnet:
+	# Floor 0: CENTER (0,0)
+	# Floor 1: RECHTS (12,0)
+	# Floor 2: OBEN (0,12)
+	# Floor 3: LINKS (-12,0)
+	# Floor 4: UNTEN (0,-12)
+	# Jedes Grid ist 10x10 Tiles, Y-Höhe: floor * 3.0m
+	
+	var grid_configs = [
+		{"floor": 0, "pos": Vector2i(0, 0), "desc": "CENTER"},
+		{"floor": 1, "pos": Vector2i(12, 0), "desc": "RECHTS"},
+		{"floor": 2, "pos": Vector2i(0, 12), "desc": "OBEN"},
+		{"floor": 3, "pos": Vector2i(-12, 0), "desc": "LINKS"},
+		{"floor": 4, "pos": Vector2i(0, -12), "desc": "UNTEN"}
+	]
+	
+	print("\n[SETUP] Creating Visual Grids (nebeneinander):")
+	for config in grid_configs:
+		var visual_grid = VisualGrid.new()
+		visual_grid.grid_size = Vector2i(10, 10)
+		visual_grid.floor = config.floor
+		visual_grid.grid_position = config.pos
+		visual_grid.tile_size = 1.0
+		add_child(visual_grid)
+		visual_grids.append(visual_grid)
+		
+		var floor_height = config.floor * 3.0
+		print("  %s: 10x10 Grid at (%d,%d) Height: %.1fm" % [config.desc, config.pos.x, config.pos.y, floor_height])
 	
 	await get_tree().process_frame
-	if visual_grid.mesh_instance and visual_grid.mesh_instance.material_override:
-		visual_grid.mesh_instance.material_override.albedo_color = Color(0.0, 0.0, 0.0, 1.0)
 	
 	fov_visualizer = Node3D.new()
 	add_child(fov_visualizer)
 	
 	grid_manager = GridManager.new()
-	grid_manager.set_grid_bounds_3d(Vector2i(0, 0), Vector2i(grid_s, grid_s), 5)
+	grid_manager.set_grid_bounds_3d(Vector2i(-12, -12), Vector2i(22, 22), 5)
 	add_child(grid_manager)
 	
 	turn_manager = TurnManager.new()
@@ -65,73 +88,67 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	print("[SETUP] Cross Layout Map created (20x20 Grid, 5 Floors)")
-	print("[SETUP] Floor 0: Center (spielbar)")
-	print("[SETUP] Floor 1: Rechts (Enemies)")
-	print("[SETUP] Floor 2: Unten (Enemies)")
-	print("[SETUP] Floor 3: Links (Enemies)")
-	print("[SETUP] Floor 4: Oben (Enemies)")
+	print("\n[SETUP] Scene ready - 5 Grids 10x10, Spieler Mitte (5,5) Floor 0, Gegner am Rand (0 oder 9) pro Floor")
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
 	var merc_scene = preload("res://scenes/entities/Merc.tscn")
 	var ivan_data = load("res://resources/mercs/ivan_dolvich.tres")
 	
-	# Player auf Floor 0 Center
+	# === PLAYER - Floor 0 CENTER (5,5) ===
 	merc = merc_scene.instantiate()
 	merc.merc_data = ivan_data
 	merc.weapon_data = akm_weapon
 	merc.is_player_unit = true
-	merc.global_position = Vector3(10.5, 0, 10.5)
+	merc.global_position = Vector3(5.5, 0.0, 5.5)  # Mitte Floor 0 Grid
 	add_child(merc)
 	
-	# === ENEMIES AM RAND DER ETAGEN ===
-	# Pro Floor: +3m Höhe
+	# === ENEMIES - AM RAND DER ANDEREN GRIDS ===
 	
-	# Enemy 1 - Floor 1 (RECHTS) am Rand - Höhe: 3m
+	# Enemy 1 - Floor 1 RECHTS (12,0) am Rand - Grid(9,5)
 	enemy1 = merc_scene.instantiate()
 	enemy1.merc_data = ivan_data.duplicate()
-	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1 Right)"
+	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1)"
 	enemy1.weapon_data = akm_weapon.duplicate()
 	enemy1.is_player_unit = false
-	enemy1.global_position = Vector3(19.5, 3.0, 10.5)  # Floor 1 = +3m Höhe
+	enemy1.global_position = Vector3(21.5, 3.0, 5.5)  # 12+9.5 = 21.5
 	add_child(enemy1)
 	
-	# Enemy 2 - Floor 2 (UNTEN) am Rand - Höhe: 6m
+	# Enemy 2 - Floor 2 OBEN (0,12) am Rand - Grid(5,9)
 	enemy2 = merc_scene.instantiate()
 	enemy2.merc_data = ivan_data.duplicate()
-	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2 Bottom)"
+	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2)"
 	enemy2.weapon_data = akm_weapon.duplicate()
 	enemy2.is_player_unit = false
-	enemy2.global_position = Vector3(10.5, 6.0, 19.5)  # Floor 2 = +6m Höhe
+	enemy2.global_position = Vector3(5.5, 6.0, 21.5)  # 12+9.5 = 21.5
 	add_child(enemy2)
 	
-	# Enemy 3 - Floor 3 (LINKS) am Rand - Höhe: 9m
+	# Enemy 3 - Floor 3 LINKS (-12,0) am Rand - Grid(0,5)
 	enemy3 = merc_scene.instantiate()
 	enemy3.merc_data = ivan_data.duplicate()
-	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3 Left)"
+	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3)"
 	enemy3.weapon_data = akm_weapon.duplicate()
 	enemy3.is_player_unit = false
-	enemy3.global_position = Vector3(0.5, 9.0, 10.5)  # Floor 3 = +9m Höhe
+	enemy3.global_position = Vector3(-10.5, 9.0, 5.5)  # -12+0.5 = -10.5
 	add_child(enemy3)
 	
-	# Enemy 4 - Floor 4 (OBEN) am Rand - Höhe: 12m
+	# Enemy 4 - Floor 4 UNTEN (0,-12) am Rand - Grid(5,0)
 	enemy4 = merc_scene.instantiate()
 	enemy4.merc_data = ivan_data.duplicate()
-	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4 Top)"
+	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4)"
 	enemy4.weapon_data = akm_weapon.duplicate()
 	enemy4.is_player_unit = false
-	enemy4.global_position = Vector3(10.5, 12.0, 0.5)  # Floor 4 = +12m Höhe
+	enemy4.global_position = Vector3(5.5, 12.0, -10.5)  # -12+0.5 = -10.5
 	add_child(enemy4)
 	
 	all_enemies = [enemy1, enemy2, enemy3, enemy4]
 	
-	print("\n>>> SETUP <<<")
-	print("Player: Floor 0 Center at (10, 10)")
-	print("Enemy 1: Floor 1 (RIGHT) at (19, 10)")
-	print("Enemy 2: Floor 2 (BOTTOM) at (10, 19)")
-	print("Enemy 3: Floor 3 (LEFT) at (0, 10)")
-	print("Enemy 4: Floor 4 (TOP) at (10, 0)")
+	print("\n>>> SETUP UNITS <<<")
+	print("Player: Floor 0 CENTER at Grid(5,5)")
+	print("Enemy 1: Floor 1 RECHTS at Grid(9,5)")
+	print("Enemy 2: Floor 2 OBEN at Grid(5,9)")
+	print("Enemy 3: Floor 3 LINKS at Grid(0,5)")
+	print("Enemy 4: Floor 4 UNTEN at Grid(5,0)")
 	print(">>> END SETUP <<<\n")
 
 func start_game() -> void:
@@ -221,14 +238,36 @@ func print_controls() -> void:
 	print("=".repeat(70) + "\n")
 
 func _input(event: InputEvent) -> void:
-	if not turn_manager or turn_manager.current_phase != TurnManager.TurnPhase.PLAYER:
-		return
-	
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		handle_click()
 	
 	if event is InputEventKey and event.pressed:
 		handle_key_input(event.keycode)
+	
+	# Kamerabewegung mit Pfeiltasten + Page Up/Down
+	if event is InputEventKey and not event.echo:
+		var camera = get_node("Camera3D")
+		if camera:
+			var move_speed = 0.5
+			match event.keycode:
+				KEY_UP:
+					camera.position.z -= move_speed
+					get_tree().root.set_input_as_handled()
+				KEY_DOWN:
+					camera.position.z += move_speed
+					get_tree().root.set_input_as_handled()
+				KEY_LEFT:
+					camera.position.x -= move_speed
+					get_tree().root.set_input_as_handled()
+				KEY_RIGHT:
+					camera.position.x += move_speed
+					get_tree().root.set_input_as_handled()
+				KEY_PAGEUP:
+					camera.position.y += move_speed
+					get_tree().root.set_input_as_handled()
+				KEY_PAGEDOWN:
+					camera.position.y -= move_speed
+					get_tree().root.set_input_as_handled()
 
 func handle_key_input(key: int) -> void:
 	match key:
