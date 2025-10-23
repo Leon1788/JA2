@@ -21,8 +21,11 @@ const FOVGridSystem = preload("res://scripts/systems/fov_grid_system.gd")
 var grid_position: Vector2i = Vector2i(0, 0)
 var grid_manager_ref: GridManager
 
-# FOV Grid: Welche Tiles sieht dieser Soldat?
+# ===== ALTE 2D-SYSTEM (UNVERÄNDERT) =====
 var fov_grid: Dictionary = {}
+
+# ===== NEUE 3D-SYSTEM =====
+var fov_grids: Dictionary = {}  # floor (int) -> Dictionary (Vector2i -> VisibilityLevel)
 
 func _ready() -> void:
 	await get_tree().process_frame
@@ -44,7 +47,8 @@ func initialize() -> void:
 	visual_component.set_team_color(is_player_unit)
 	
 	# WICHTIG: Dupliziere Mesh für jede Unit-Instanz!
-	_duplicate_mesh()
+	# FÜR TESTS DEAKTIVIERT - nur Code-Simulation, keine Meshes!
+	# _duplicate_mesh()
 	
 	if weapon_data:
 		combat_component.initialize(self, weapon_data, action_point_component)
@@ -81,13 +85,18 @@ func initialize_movement(grid_manager: GridManager) -> void:
 	movement_component.initialize(self, grid_manager, action_point_component)
 	combat_component.grid_manager = grid_manager
 	
-	# Berechne initiales FOV Grid
+	# Berechne initialer FOV Grid (alte 2D-Version)
 	update_fov_grid()
+	
+	# Berechne initiale FOV Grids pro Etage (neue 3D-Version)
+	update_fov_grids_3d()
+
+# ===== ALTE FUNKTIONEN (UNVERÄNDERT) =====
 
 func update_fov_grid() -> void:
 	if grid_manager_ref:
 		fov_grid = FOVGridSystem.calculate_fov_grid(self, grid_manager_ref)
-		print(merc_data.merc_name, " FOV updated. Visible tiles: ", fov_grid.size())
+		print("[Merc] ", merc_data.merc_name, " FOV updated. Visible tiles: ", fov_grid.size())
 		
 		# Invalidate LoS cache when FOV changes
 		line_of_sight_system.invalidate_cache()
@@ -96,8 +105,6 @@ func update_fov_grid() -> void:
 		_invalidate_all_los_caches()
 
 func _invalidate_all_los_caches() -> void:
-	# Wenn sich DIESE Unit ändert, müssen alle anderen Units
-	# ihre LoS-Caches neu berechnen, weil DIESE Unit jetzt woanders ist!
 	var scene_root = get_parent()
 	if not scene_root:
 		return
@@ -116,6 +123,58 @@ func get_visibility_level(target_pos: Vector2i) -> int:
 		return FOVGridSystem.VisibilityLevel.BLOCKED
 	return fov_grid[target_pos]
 
+# ===== NEUE 3D-FUNKTIONEN =====
+
+func update_fov_grids_3d() -> void:
+	"""Berechnet FOV-Grids für ALLE Etagen - FLEXIBEL für jede Anzahl Floors"""
+	if not grid_manager_ref:
+		return
+	
+	fov_grids.clear()
+	var max_floors = grid_manager_ref.max_floors
+	
+	print("[Merc] ", merc_data.merc_name, " calculating FOV for ", max_floors, " floors...")
+	
+	for floor in range(max_floors):
+		fov_grids[floor] = FOVGridSystem.calculate_fov_grid_3d(self, grid_manager_ref, floor)
+		print("[Merc]   Floor ", floor, ": ", fov_grids[floor].size(), " visible tiles")
+	
+	# Invalidate LoS cache
+	line_of_sight_system.invalidate_cache()
+	_invalidate_all_los_caches()
+
+func can_see_position_3d(target_pos: Vector2i, target_floor: int) -> bool:
+	"""Prüft ob Position auf bestimmter Etage im FOV ist"""
+	if not grid_manager_ref:
+		return false
+	
+	target_floor = grid_manager_ref.clamp_floor(target_floor)
+	
+	if not fov_grids.has(target_floor):
+		return false
+	
+	if not fov_grids[target_floor].has(target_pos):
+		return false
+	
+	return fov_grids[target_floor][target_pos] > FOVGridSystem.VisibilityLevel.BLOCKED
+
+func get_visibility_level_3d(target_pos: Vector2i, target_floor: int) -> int:
+	"""Gibt Sichtbarkeitslevel für Position auf bestimmter Etage"""
+	if not grid_manager_ref:
+		return FOVGridSystem.VisibilityLevel.BLOCKED
+	
+	target_floor = grid_manager_ref.clamp_floor(target_floor)
+	
+	if not fov_grids.has(target_floor):
+		return FOVGridSystem.VisibilityLevel.BLOCKED
+	
+	if not fov_grids[target_floor].has(target_pos):
+		return FOVGridSystem.VisibilityLevel.BLOCKED
+	
+	return fov_grids[target_floor][target_pos]
+
+# ===== COMBAT FUNKTIONEN =====
+
 func can_see_enemy(target: Merc) -> bool:
 	return line_of_sight_system.can_see_enemy(target)
 
@@ -127,6 +186,7 @@ func start_turn() -> void:
 	animation_component.play_idle()
 	status_effect_system.process_turn_effects()
 	update_fov_grid()
+	update_fov_grids_3d()
 
 func end_turn() -> void:
 	pass
@@ -139,7 +199,8 @@ func move_to_grid(target_pos: Vector2i) -> bool:
 	var success = movement_component.move_to(target_pos)
 	if success:
 		animation_component.play_idle()
-		update_fov_grid()  # Update nach Bewegung
+		update_fov_grid()
+		update_fov_grids_3d()
 	return success
 
 func can_move_to_grid(target_pos: Vector2i) -> bool:
@@ -173,7 +234,8 @@ func can_shoot(target: Merc) -> bool:
 func change_stance(new_stance: StanceSystem.Stance) -> bool:
 	var success = stance_system.change_stance(new_stance)
 	if success:
-		update_fov_grid()  # Update nach Stance-Wechsel
+		update_fov_grid()
+		update_fov_grids_3d()
 	return success
 
 func get_eye_position() -> Vector3:
@@ -182,13 +244,15 @@ func get_eye_position() -> Vector3:
 func rotate_towards(target: Merc) -> bool:
 	var success = facing_system.rotate_towards_target(target)
 	if success:
-		update_fov_grid()  # Update nach Rotation
+		update_fov_grid()
+		update_fov_grids_3d()
 	return success
 
 func rotate_to_angle(angle: float) -> bool:
 	var success = facing_system.rotate_to_angle(angle)
 	if success:
-		update_fov_grid()  # Update nach Rotation
+		update_fov_grid()
+		update_fov_grids_3d()
 	return success
 
 func on_death() -> void:

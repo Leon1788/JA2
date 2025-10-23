@@ -9,6 +9,8 @@ enum VisibilityLevel {
 
 const MAX_SIGHT_RANGE: int = 15
 
+# ===== ALTE 2D-FUNKTIONEN (UNVERÄNDERT) =====
+
 static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dictionary:
 	var fov_grid: Dictionary = {}
 	var soldier_pos = soldier.movement_component.current_grid_pos
@@ -59,7 +61,6 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 
 		var visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, grid_manager)
 
-
 		# --- (V14 LOGIK - Nur echtes Cover wirft Schatten) ---
 		var is_actual_cover = grid_manager.get_cover_at(target_pos) != null
 		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
@@ -70,7 +71,6 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 				debug_wall_distance = distance
 		fov_grid[target_pos] = visibility
 		# --- ENDE V14 LOGIK ---
-
 
 		# DEBUG: Log Wand-Prüfung (nur für die 10,10 Kachel, anpassbar)
 		if target_pos == Vector2i(10, 10) or target_pos == Vector2i(31, 10): # Prüft beide Cover Positionen
@@ -95,6 +95,112 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 		print("=================\n")
 
 	return fov_grid
+
+# ===== NEUE 3D-FUNKTIONEN =====
+
+static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, target_floor: int) -> Dictionary:
+	"""
+	Berechnet FOV-Grid für eine bestimmte Etage mit vollem Shadow-Casting
+	Funktioniert FLEXIBEL mit beliebig vielen Floors!
+	"""
+	var fov_grid: Dictionary = {}
+	var soldier_pos = soldier.movement_component.current_grid_pos
+	var soldier_floor = soldier.movement_component.current_floor
+	var soldier_eye_height = soldier.stance_system.get_eye_height()
+	var facing_angle = soldier.facing_system.get_facing_angle()
+	var fov_angle = soldier.facing_system.fov_angle
+
+	var shadow_blocked: Dictionary = {}
+	var debug_shadow_blocks = 0
+
+	var tiles_to_check: Array = []
+
+	# Sammele alle Tiles auf dieser Etage innerhalb des Sichtradius
+	for x in range(soldier_pos.x - MAX_SIGHT_RANGE, soldier_pos.x + MAX_SIGHT_RANGE + 1):
+		for y in range(soldier_pos.y - MAX_SIGHT_RANGE, soldier_pos.y + MAX_SIGHT_RANGE + 1):
+			var target_pos = Vector2i(x, y)
+
+			if not grid_manager.is_within_bounds(target_pos):
+				continue
+
+			var distance = soldier_pos.distance_to(target_pos)
+			if distance > MAX_SIGHT_RANGE:
+				continue
+
+			tiles_to_check.append({"pos": target_pos, "dist": distance})
+
+	# Sortiere nach Distanz (näher = zuerst)
+	tiles_to_check.sort_custom(func(a, b): return a.dist < b.dist)
+
+	print("[FOV-3D] Floor %d: checking %d tiles" % [target_floor, tiles_to_check.size()])
+
+	for tile_data in tiles_to_check:
+		var target_pos = tile_data.pos
+		var distance = tile_data.dist
+
+		if target_pos == soldier_pos:
+			fov_grid[target_pos] = VisibilityLevel.CLEAR
+			continue
+
+		# Prüfe ob im FOV-Kegel (120°)
+		if not _is_in_fov_cone(soldier_pos, target_pos, facing_angle, fov_angle):
+			fov_grid[target_pos] = VisibilityLevel.BLOCKED
+			continue
+
+		var angle_to_tile = _calculate_angle_to_target(soldier_pos, target_pos)
+
+		# Prüfe ob im Shadow (von Cover blockiert)
+		if _is_in_shadow(target_pos, soldier_pos, angle_to_tile, distance, shadow_blocked):
+			fov_grid[target_pos] = VisibilityLevel.BLOCKED
+			debug_shadow_blocks += 1
+			continue
+
+		# Prüfe Line-of-Sight (mit 3D-Höhen wenn andere Etage!)
+		var visibility: int
+		if target_floor == soldier_floor:
+			# Gleiche Etage: normale 2D LoS
+			visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, grid_manager)
+		else:
+			# Andere Etage: 3D LoS mit Höhen-Check - FLEXIBEL FÜR BELIEBIG VIELE FLOORS
+			visibility = _check_line_of_sight_3d(soldier_pos, target_pos, soldier_eye_height, soldier_floor, target_floor, grid_manager)
+
+		# Nur echtes Cover wirft Schatten
+		var is_actual_cover = grid_manager.get_cover_at(target_pos) != null
+		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
+			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
+
+		fov_grid[target_pos] = visibility
+
+	print("[FOV-3D] Floor %d: %d visible tiles" % [target_floor, fov_grid.size()])
+
+	return fov_grid
+
+static func _check_line_of_sight_3d(from_pos: Vector2i, to_pos: Vector2i, eye_height: float, from_floor: int, to_floor: int, grid_manager: GridManager) -> int:
+	"""
+	Line-of-Sight Check mit 3D-Höhen für verschiedene Etagen
+	ÄNDERUNG: Nutzt grid_manager.max_floors statt hardcoded 4 Floors
+	"""
+	# Für 3D LoS auf anderen Etagen: vereinfacht prüfen
+	# (Real Raycasts werden in LineOfSightSystem gemacht)
+	
+	var floor_distance = abs(to_floor - from_floor)
+	var max_floors = grid_manager.max_floors
+	
+	# Max Sichtweite: dynamisch basierend auf Anzahl Floors
+	var max_floor_range = max_floors  # Alle Floors sichtbar (später: Cover/Distanz blockiert)
+	
+	if floor_distance > max_floor_range:
+		return VisibilityLevel.BLOCKED
+	
+	# Wenn Position sehr weit weg: schwächer sichtbar
+	var horizontal_distance = from_pos.distance_to(to_pos)
+	if horizontal_distance > 12.0:
+		return VisibilityLevel.PARTIAL
+	
+	# Standard: sichtbar (reale Blockade wird durch Raycast geprüft)
+	return VisibilityLevel.CLEAR
+
+# ===== HELPER FUNKTIONEN (UNVERÄNDERT) =====
 
 static func _calculate_angle_to_target(from: Vector2i, to: Vector2i) -> float:
 	var dx = float(to.x - from.x)
@@ -179,7 +285,6 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 			elif cover_height == highest_cover_height and distance_to_cover < closest_cover_distance:
 				closest_cover_distance = distance_to_cover
 
-
 	# Keine Deckung gefunden -> freie Sicht
 	if not cover_found:
 		return VisibilityLevel.CLEAR
@@ -234,7 +339,6 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 			else:
 				return VisibilityLevel.CLEAR
 		# --- ENDE V24b LOGIK ---
-
 
 # Bresenham-Algorithmus zur Rasterisierung einer Linie zwischen zwei Punkten
 static func _bresenham_line(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
