@@ -290,13 +290,11 @@ func _raycast_3d_code(target: Merc, body_part: String) -> bool:
 	Simuliert einen Raycast mit CODE statt Godot Physics!
 	Prüft Cover-Blöcke auf der Ray-Linie
 	"""
-	# Berechne Start (Augenhöhe Schütze)
+	# Berechne Start (Augenhöhe Schütze) - KORREKT!
+	var from = owner_merc.get_eye_position()
 	var shooter_floor = owner_merc.movement_component.current_floor
-	var shooter_eye_height = owner_merc.stance_system.get_eye_height()
-	var shooter_floor_base = shooter_floor * GridManager.FLOOR_HEIGHT
-	var from = owner_merc.global_position + Vector3(0, shooter_floor_base + shooter_eye_height, 0)
 	
-	# Berechne Ziel (Körperteil Ziel)
+	# Berechne Ziel (Körperteil Ziel) - KORREKT!
 	var target_floor = target.movement_component.current_floor
 	var target_floor_base = target_floor * GridManager.FLOOR_HEIGHT
 	var target_stance_height = target.stance_system.get_eye_height()
@@ -304,24 +302,24 @@ func _raycast_3d_code(target: Merc, body_part: String) -> bool:
 	var to: Vector3
 	match body_part:
 		"head":
-			to = target.global_position + Vector3(0, target_floor_base + target_stance_height, 0)
+			to = target.global_position + Vector3(0, target_stance_height, 0)
 		"torso":
-			to = target.global_position + Vector3(0, target_floor_base + target_stance_height * 0.6, 0)
+			to = target.global_position + Vector3(0, target_stance_height * 0.6, 0)
 		"legs":
-			to = target.global_position + Vector3(0, target_floor_base + target_stance_height * 0.3, 0)
+			to = target.global_position + Vector3(0, target_stance_height * 0.3, 0)
 		_:
-			to = target.global_position + Vector3(0, target_floor_base, 0)
+			to = target.global_position
 	
-	print("[LoS]     Ray %s: from (%.2f, %.2f, %.2f) [Floor %d, %.1fm] to (%.2f, %.2f, %.2f) [Floor %d, %.1fm]" % [
+	print("[LoS]     Ray %s: from (%.2f, %.2f, %.2f) [Floor %d] to (%.2f, %.2f, %.2f) [Floor %d]" % [
 		body_part,
 		from.x, from.y, from.z,
-		shooter_floor, from.y,
+		shooter_floor,
 		to.x, to.y, to.z,
-		target_floor, to.y
+		target_floor
 	])
 	
-	# Prüfe Cover entlang der Ray-Linie
-	var is_blocked = _check_cover_along_ray_3d(from, to)
+	# Prüfe Cover entlang der Ray-Linie (mit target_floor!)
+	var is_blocked = _check_cover_along_ray_3d(from, to, target_floor)
 	
 	if is_blocked:
 		print("[LoS]       → BLOCKED by cover")
@@ -330,39 +328,63 @@ func _raycast_3d_code(target: Merc, body_part: String) -> bool:
 	print("[LoS]       → CLEAR")
 	return true
 
-func _check_cover_along_ray_3d(from: Vector3, to: Vector3) -> bool:
+func _check_cover_along_ray_3d(from: Vector3, to: Vector3, target_floor: int) -> bool:
 	"""
-	Code-basiert: Prüfe ob Cover die Ray blockiert
+	Code-basiert: Prüfe ob Cover die Ray blockiert (MIT 3D FLOOR SUPPORT!)
 	"""
 	if not owner_merc.grid_manager_ref:
 		return false
 	
 	var grid_manager = owner_merc.grid_manager_ref
 	
+	# Nutze current_floor!
+	var from_floor = owner_merc.movement_component.current_floor
+	var to_floor = target_floor
+	
+	print("[LoS]         Checking covers from Floor %d to Floor %d" % [from_floor, to_floor])
+	
 	# Bresenham-Linie auf Grid-Ebene
 	var from_grid = grid_manager.world_to_grid(from)
 	var to_grid = grid_manager.world_to_grid(to)
 	var line_tiles = _bresenham_line(from_grid, to_grid)
+	
+	print("[LoS]         Ray line: %d tiles from %s to %s" % [line_tiles.size(), from_grid, to_grid])
 	
 	# Prüfe jeden Tile
 	for tile_pos in line_tiles:
 		if tile_pos == from_grid or tile_pos == to_grid:
 			continue
 		
-		# Gibt es Cover an dieser Position?
-		var cover = grid_manager.get_cover_at(tile_pos)
-		if not cover or not cover.cover_data:
-			continue
+		# Prüfe ALLE Floors zwischen from_floor und to_floor
+		var min_floor = min(from_floor, to_floor)
+		var max_floor = max(from_floor, to_floor)
 		
-		# Berechne Ray-Höhe an diesem Tile
-		var ray_height = _lerp_3d_height(from, to, tile_pos, grid_manager)
-		var cover_height = cover.cover_data.cover_height
-		
-		# Ray blockiert wenn unter Cover?
-		if ray_height < cover_height:
-			print("[LoS]         Cover at %s: ray_height=%.2fm < cover_height=%.2fm → BLOCKED" % 
-				[tile_pos, ray_height, cover_height])
-			return true
+		for check_floor in range(min_floor, max_floor + 1):
+			# Gibt es Cover an dieser Position auf diesem Floor?
+			var cover = grid_manager.get_cover_at_3d(tile_pos, check_floor)
+			
+			print("[LoS]         Tile %s Floor %d: cover=%s" % [tile_pos, check_floor, "YES" if cover else "NO"])
+			
+			if not cover or not cover.cover_data:
+				continue
+			
+			print("[LoS]         Tile %s Floor %d: cover=YES (height=%.2fm)" % [tile_pos, check_floor, cover.cover_data.cover_height])
+			
+			# Berechne Ray-Höhe an diesem Tile
+			var ray_height = _lerp_3d_height(from, to, tile_pos, grid_manager)
+			var cover_base = check_floor * GridManager.FLOOR_HEIGHT
+			var cover_top = cover_base + cover.cover_data.cover_height
+			
+			print("[LoS]           Ray height at tile: %.2fm" % ray_height)
+			print("[LoS]           Cover range: %.2fm to %.2fm" % [cover_base, cover_top])
+			print("[LoS]           Ray >= base? %s (%.2f >= %.2f)" % [ray_height >= cover_base, ray_height, cover_base])
+			print("[LoS]           Ray <= top? %s (%.2f <= %.2f)" % [ray_height <= cover_top, ray_height, cover_top])
+			
+			# Ray blockiert wenn in Cover-Höhenbereich?
+			if ray_height >= cover_base and ray_height <= cover_top:
+				print("[LoS]         Cover at %s (Floor %d): ray_height=%.2fm in range [%.2fm-%.2fm] → BLOCKED" % 
+					[tile_pos, check_floor, ray_height, cover_base, cover_top])
+				return true
 	
 	return false
 

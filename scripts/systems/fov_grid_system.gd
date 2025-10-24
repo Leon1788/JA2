@@ -9,11 +9,12 @@ enum VisibilityLevel {
 
 const MAX_SIGHT_RANGE: int = 15
 
-# ===== ALTE 2D-FUNKTIONEN (UNVERÄNDERT) =====
+# ===== ALTE 2D-FUNKTIONEN (MIT 3D COVER FIX) =====
 
 static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dictionary:
 	var fov_grid: Dictionary = {}
 	var soldier_pos = soldier.movement_component.current_grid_pos
+	var soldier_floor = soldier.movement_component.current_floor  # Nutze Floor!
 	var soldier_eye_height = soldier.stance_system.get_eye_height()
 	var facing_angle = soldier.facing_system.get_facing_angle()
 	var fov_angle = soldier.facing_system.fov_angle
@@ -59,10 +60,10 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 			debug_shadow_blocks += 1
 			continue
 
-		var visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, grid_manager)
+		var visibility = _check_line_of_sight_3d_wrapper(soldier_pos, target_pos, soldier_eye_height, soldier_floor, grid_manager)
 
 		# --- (V14 LOGIK - Nur echtes Cover wirft Schatten) ---
-		var is_actual_cover = grid_manager.get_cover_at(target_pos) != null
+		var is_actual_cover = grid_manager.get_cover_at_3d(target_pos, soldier_floor) != null
 		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
 			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
 			# Prüfe auf die spezifischen Cover-Positionen für Debugging
@@ -74,7 +75,7 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 
 		# DEBUG: Log Wand-Prüfung (nur für die 10,10 Kachel, anpassbar)
 		if target_pos == Vector2i(10, 10) or target_pos == Vector2i(31, 10): # Prüft beide Cover Positionen
-			var cover_obj = grid_manager.get_cover_at(target_pos)
+			var cover_obj = grid_manager.get_cover_at_3d(target_pos, soldier_floor)
 			var cover_name = cover_obj.cover_data.cover_name if cover_obj and cover_obj.cover_data else "Unknown Cover"
 			print(">>> COVER CHECK ((%s)) <<<" % target_pos) # Extra Klammern zur Identifizierung
 			print("  Cover Type: ", cover_name)
@@ -95,6 +96,10 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 		print("=================\n")
 
 	return fov_grid
+
+static func _check_line_of_sight_3d_wrapper(from: Vector2i, to: Vector2i, eye_height: float, floor: int, grid_manager: GridManager) -> int:
+	"""Wrapper für _check_line_of_sight mit 3D Cover Support"""
+	return _check_line_of_sight(from, to, eye_height, floor, grid_manager)
 
 # ===== NEUE 3D-FUNKTIONEN =====
 
@@ -158,14 +163,14 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 		# Prüfe Line-of-Sight (mit 3D-Höhen wenn andere Etage!)
 		var visibility: int
 		if target_floor == soldier_floor:
-			# Gleiche Etage: normale 2D LoS
-			visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, grid_manager)
+			# Gleiche Etage: normale 2D LoS mit 3D Cover!
+			visibility = _check_line_of_sight(soldier_pos, target_pos, soldier_eye_height, soldier_floor, grid_manager)
 		else:
 			# Andere Etage: 3D LoS mit Höhen-Check - FLEXIBEL FÜR BELIEBIG VIELE FLOORS
 			visibility = _check_line_of_sight_3d(soldier_pos, target_pos, soldier_eye_height, soldier_floor, target_floor, grid_manager)
 
 		# Nur echtes Cover wirft Schatten
-		var is_actual_cover = grid_manager.get_cover_at(target_pos) != null
+		var is_actual_cover = grid_manager.get_cover_at_3d(target_pos, target_floor) != null
 		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
 			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
 
@@ -257,7 +262,7 @@ static func _is_in_fov_cone(from: Vector2i, to: Vector2i, facing_angle: float, f
 	# Ist die absolute Differenz kleiner/gleich dem halben FOV-Winkel?
 	return abs(angle_diff) <= (fov_angle / 2.0)
 
-static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float, grid_manager: GridManager) -> int:
+static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float, floor: int, grid_manager: GridManager) -> int:
 	var line = _bresenham_line(from, to)
 
 	# Linie zu kurz oder nur Start/Endpunkt -> immer sichtbar
@@ -271,7 +276,7 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 	# Prüfe alle Zellen auf der Linie, AUCH die Zielzelle 'to'
 	for i in range(1, line.size()):
 		var cell = line[i]
-		var cover = grid_manager.get_cover_at(cell)
+		var cover = grid_manager.get_cover_at_3d(cell, floor)  # 3D Version mit Floor!
 
 		if cover:
 			cover_found = true

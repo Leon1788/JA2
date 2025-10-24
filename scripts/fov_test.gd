@@ -195,43 +195,69 @@ func setup_units() -> void:
 	print(">>> END SETUP <<<\n")
 
 func spawn_test_wall() -> void:
-	var wall_cover_data = CoverData.new()
-	wall_cover_data.cover_name = "Test Wall 3m"
-	wall_cover_data.cover_type = CoverData.CoverType.HIGH
-	wall_cover_data.cover_height = 3.0
-	wall_cover_data.is_destructible = false
+	print("\n=== SPAWN_TEST_WALL CALLED ===")
 	
-	var wall = CoverObject.new()
-	wall.cover_data = wall_cover_data
+	# Lade DEIN wall_high.tres für Daten
+	var wall_cover_data = load("res://resources/cover/wall_high.tres")
+	if not wall_cover_data:
+		print("ERROR: wall_high.tres not found at res://resources/cover/wall_high.tres")
+		return
 	
-	var wall_grid = Vector2i(6, 5)
-	var wall_world = grid_manager.grid_to_world(wall_grid)
-	wall.position = Vector3(wall_world.x, 3.0, wall_world.z)
-	wall.grid_position = wall_grid
+	print("    wall_high.tres loaded successfully! Height=", wall_cover_data.cover_height, "m")
 	
-	var mesh_inst = MeshInstance3D.new()
-	var box_mesh = BoxMesh.new()
-	box_mesh.size = Vector3(1.0, 3.0, 1.0)
-	mesh_inst.mesh = box_mesh
-	var mat = StandardMaterial3D.new()
-	mat.albedo_color = Color.RED
-	mesh_inst.material_override = mat
-	mesh_inst.position.y = 1.5
-	wall.add_child(mesh_inst)
+	# Lade CoverObject Scene
+	var cover_scene = load("res://scenes/entities/CoverObject.tscn")
+	if not cover_scene:
+		print("ERROR: CoverObject.tscn not found at res://scenes/entities/CoverObject.tscn")
+		return
 	
-	var col_shape = CollisionShape3D.new()
-	var box_shape = BoxShape3D.new()
-	box_shape.size = Vector3(1.0, 3.0, 1.0)
-	col_shape.shape = box_shape
-	col_shape.position.y = 1.5
-	wall.add_child(col_shape)
+	print("    CoverObject.tscn loaded successfully!")
+	print("\n>>> SPAWNING TEST WALLS <<<")
 	
-	wall.collision_layer = 1
-	wall.collision_mask = 0
+	# === WAND AUF FLOOR 0 ===
+	var wall_floor0 = cover_scene.instantiate()
+	wall_floor0.cover_data = wall_cover_data
+	wall_floor0.grid_position = Vector2i(15, 20)
 	
-	add_child(wall)
+	var wall0_world = grid_manager.grid_to_world_3d(Vector2i(15, 20), 0)
+	wall_floor0.position = wall0_world
 	
-	print("\n>>> TEST WALL spawned at Grid", wall_grid, " (Floor 1) - 3m high RED wall <<<\n")
+	add_child(wall_floor0)
+	
+	# WICHTIG: Warte bis _ready() aufgerufen wurde!
+	await get_tree().process_frame
+	
+	# Färbe Mesh blau
+	if wall_floor0.mesh_instance:
+		var mat0 = StandardMaterial3D.new()
+		mat0.albedo_color = Color.BLUE
+		wall_floor0.mesh_instance.material_override = mat0
+	
+	grid_manager.place_cover_3d(Vector2i(15, 20), 0, wall_floor0)
+	print("    FLOOR 0: Grid(15,20) - BLUE WALL")
+	
+	# === WAND AUF FLOOR 1 ===
+	var wall_floor1 = cover_scene.instantiate()
+	wall_floor1.cover_data = wall_cover_data.duplicate()
+	wall_floor1.grid_position = Vector2i(6, 5)
+	
+	var wall1_world = grid_manager.grid_to_world_3d(Vector2i(6, 5), 1)
+	wall_floor1.position = wall1_world
+	
+	add_child(wall_floor1)
+	
+	# WICHTIG: Warte bis _ready() aufgerufen wurde!
+	await get_tree().process_frame
+	
+	# Färbe Mesh rot
+	if wall_floor1.mesh_instance:
+		var mat1 = StandardMaterial3D.new()
+		mat1.albedo_color = Color.RED
+		wall_floor1.mesh_instance.material_override = mat1
+	
+	grid_manager.place_cover_3d(Vector2i(6, 5), 1, wall_floor1)
+	print("    FLOOR 1: Grid(6,5) - RED WALL")
+	print(">>> WALLS SPAWNED <<<\n")
 
 func start_game() -> void:
 	await get_tree().process_frame
