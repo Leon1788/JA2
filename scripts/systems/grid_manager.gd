@@ -2,30 +2,29 @@ extends Node
 class_name GridManager
 
 const TILE_SIZE: float = 1.0
-const FLOOR_HEIGHT: float = 3.0  # NEU: Höhe einer Etage
+const FLOOR_HEIGHT: float = 3.0
 
 # ===== ALTE 2D-SYSTEME (UNVERÄNDERT) =====
-var grid_data: Dictionary = {}  # Vector2i -> Occupant
-var cover_data: Dictionary = {}  # Vector2i -> CoverObject
+var grid_data: Dictionary = {}
+var cover_data: Dictionary = {}
 
 var grid_min: Vector2i = Vector2i(0, 0)
 var grid_max: Vector2i = Vector2i(10, 10)
 
 # ===== NEUE 3D-SYSTEME =====
-var max_floors: int = 1  # Anzahl Etagen (flexibel pro Map)
-var floor_data: Dictionary = {}  # floor (int) -> Dictionary(Vector2i -> Occupant)
-var floor_cover_data: Dictionary = {}  # floor (int) -> Dictionary(Vector2i -> CoverObject)
+var max_floors: int = 1
+var floor_data: Dictionary = {}
+var floor_cover_data: Dictionary = {}
+var visual_grids: Array[VisualGrid] = []  # NEU: speichere alle VisualGrids
 
-# ===== NEUE HELPER FUNKTIONEN FÜR FLEXIBLE FLOOR-VALIDIERUNG =====
+# ===== HELPER FUNKTIONEN FÜR FLEXIBLE FLOOR-VALIDIERUNG =====
 func set_max_floors(count: int) -> void:
-	"""Setzt die Anzahl der Etagen mit Validierung"""
 	if count < 1:
 		push_error("[GridManager] max_floors muss >= 1 sein! Setze auf 1.")
 		count = 1
 	
 	max_floors = count
 	
-	# Initialisiere floor_data und floor_cover_data für alle Etagen
 	for floor in range(max_floors):
 		if not floor_data.has(floor):
 			floor_data[floor] = {}
@@ -35,11 +34,9 @@ func set_max_floors(count: int) -> void:
 	print("[GridManager] max_floors set to ", max_floors)
 
 func is_valid_floor(floor: int) -> bool:
-	"""Prüft ob eine Etage im gültigen Bereich ist"""
 	return floor >= 0 and floor < max_floors
 
 func clamp_floor(floor: int) -> int:
-	"""Klemmt eine Etage auf den gültigen Bereich"""
 	return clamp(floor, 0, max_floors - 1)
 
 # ===== ALTE FUNKTIONEN (UNVERÄNDERT) =====
@@ -153,6 +150,49 @@ func set_grid_bounds_3d(min_pos: Vector2i, max_pos: Vector2i, floors: int) -> vo
 	set_max_floors(floors)
 	print("[GridManager] 3D Grid: ", max_pos, " with ", max_floors, " floors")
 
+func auto_calculate_bounds_from_grids(visual_grids_param: Array[VisualGrid], floors: int) -> void:
+	"""Berechnet automatisch Bounds aus allen VisualGrids - skalierbar für beliebige Maps!"""
+	visual_grids = visual_grids_param  # Speichere visual_grids!
+	
+	var min_x: int = 999999
+	var min_y: int = 999999
+	var max_x: int = -999999
+	var max_y: int = -999999
+	
+	for grid in visual_grids:
+		var grid_min_pos = grid.grid_position
+		var grid_max_pos = grid.grid_position + grid.grid_size
+		
+		min_x = mini(min_x, grid_min_pos.x)
+		min_y = mini(min_y, grid_min_pos.y)
+		max_x = maxi(max_x, grid_max_pos.x)
+		max_y = maxi(max_y, grid_max_pos.y)
+	
+	var final_min = Vector2i(min_x, min_y)
+	var final_max = Vector2i(max_x, max_y)
+	
+	set_grid_bounds_3d(final_min, final_max, floors)
+	print("[GridManager] Auto-bounds calculated from %d grids: %s to %s" % [visual_grids.size(), final_min, final_max])
+
+func world_to_grid_floor_relative(world_pos: Vector3, viewing_floor: int) -> Vector2i:
+	"""Konvertiert World-Position zu Grid-Position mit Floor-Offset"""
+	if viewing_floor < 0 or viewing_floor >= visual_grids.size():
+		push_warning("[GridManager] Invalid viewing_floor: ", viewing_floor)
+		return Vector2i.ZERO
+	
+	var grid_pos = world_to_grid(world_pos)
+	var floor_offset = visual_grids[viewing_floor].grid_position
+	return grid_pos - floor_offset
+
+func is_grid_pos_in_floor(grid_pos: Vector2i, viewing_floor: int) -> bool:
+	"""Prüft ob Grid-Position innerhalb des Floors ist"""
+	if viewing_floor < 0 or viewing_floor >= visual_grids.size():
+		return false
+	
+	var floor_grid = visual_grids[viewing_floor]
+	return grid_pos.x >= 0 and grid_pos.x < floor_grid.grid_size.x and \
+		   grid_pos.y >= 0 and grid_pos.y < floor_grid.grid_size.y
+
 func world_to_grid_3d(world_pos: Vector3) -> Dictionary:
 	var floor = int(floor(world_pos.y / FLOOR_HEIGHT))
 	floor = clamp_floor(floor)
@@ -182,11 +222,9 @@ func is_tile_walkable_3d(grid_pos: Vector2i, floor: int) -> bool:
 	if not is_valid_floor(floor):
 		return false
 	
-	# Prüfe floor_cover_data
 	if floor_cover_data.has(floor) and floor_cover_data[floor].has(grid_pos):
 		return false
 	
-	# Prüfe floor_data
 	if floor_data.has(floor) and floor_data[floor].has(grid_pos):
 		return false
 	

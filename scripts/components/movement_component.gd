@@ -58,7 +58,58 @@ func move_to(target_grid_pos: Vector2i) -> bool:
 	return true
 
 func _calculate_distance(from: Vector2i, to: Vector2i) -> int:
-	return abs(to.x - from.x) + abs(to.y - from.y)
+	var dx = abs(to.x - from.x)
+	var dy = abs(to.y - from.y)
+	# Hybrid Distance: min(dx,dy) diagonale Schritte + abs(dx-dy) gerade Schritte
+	return min(dx, dy) + abs(dx - dy)
+
+# ===== NEUE 3D-FUNKTIONEN (ABSOLUT) =====
+
+func can_move_to_grid_absolute(target_grid_pos: Vector2i, target_floor: int) -> bool:
+	"""Prüft ob man zu absoluter Grid-Position auf Floor gehen kann"""
+	if not grid_manager.is_within_bounds(target_grid_pos):
+		return false
+	
+	var distance = _calculate_distance(current_grid_pos, target_grid_pos)
+	
+	var ap_modifier = 1.0
+	if owner_entity.has_node("StatusEffectSystem"):
+		var status_system = owner_entity.get_node("StatusEffectSystem")
+		ap_modifier = status_system.get_movement_ap_modifier()
+	
+	var ap_cost = int(distance * AP_COST_PER_TILE * ap_modifier)
+	
+	return action_point_component.has_ap(ap_cost)
+
+func move_to_grid_absolute(target_grid_pos: Vector2i, target_floor: int) -> bool:
+	"""Bewegt Unit zu absoluter Grid-Position auf Floor"""
+	if not can_move_to_grid_absolute(target_grid_pos, target_floor):
+		return false
+	
+	var distance = _calculate_distance(current_grid_pos, target_grid_pos)
+	
+	var ap_modifier = 1.0
+	if owner_entity.has_node("StatusEffectSystem"):
+		var status_system = owner_entity.get_node("StatusEffectSystem")
+		ap_modifier = status_system.get_movement_ap_modifier()
+	
+	var ap_cost = int(distance * AP_COST_PER_TILE * ap_modifier)
+	
+	if not action_point_component.spend_ap(ap_cost):
+		return false
+	
+	# Update Position
+	grid_manager.free_tile(current_grid_pos)
+	current_grid_pos = target_grid_pos
+	current_floor = target_floor
+	grid_manager.occupy_tile(current_grid_pos, owner_entity)
+	
+	# Setze World-Position
+	owner_entity.global_position = grid_manager.grid_to_world(current_grid_pos)
+	# Y-Höhe nach Floor
+	owner_entity.global_position.y = target_floor * 3.0
+	
+	return true
 
 # ===== NEUE 3D-FUNKTIONEN =====
 

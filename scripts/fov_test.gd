@@ -11,7 +11,7 @@ var grid_manager: GridManager
 var turn_manager: TurnManager
 var visual_grids: Array[VisualGrid] = []
 var ui_panel: UnitInfoPanel
-var fov_visualizer: Node3D
+var fov_visualizer: FOVVisualizer
 var fow_system: FogOfWarSystem
 
 func _ready() -> void:
@@ -21,7 +21,6 @@ func _ready() -> void:
 	
 	var camera = get_node("Camera3D")
 	if camera:
-		# Isometrische 2.5D Perspektive
 		camera.position = Vector3(5, 20, 20)
 		camera.look_at(Vector3(5, 5, 5))
 	
@@ -33,16 +32,46 @@ func _ready() -> void:
 	await get_tree().create_timer(0.5).timeout
 	test_los_system()
 
+func _process(_delta: float) -> void:
+	update_hover_highlight()
+
+func update_hover_highlight() -> void:
+	var camera = get_viewport().get_camera_3d()
+	var mouse_pos = get_viewport().get_mouse_position()
+	var from = camera.project_ray_origin(mouse_pos)
+	var normal = camera.project_ray_normal(mouse_pos)
+	
+	# Clear alle anderen Floors
+	for i in range(visual_grids.size()):
+		if i != merc.viewing_floor:
+			visual_grids[i].clear_highlight()
+	
+	# Plane auf aktueller viewing_floor Höhe
+	var floor_height = merc.viewing_floor * grid_manager.FLOOR_HEIGHT
+	var plane = Plane(Vector3.UP, floor_height)
+	var intersection = plane.intersects_ray(from, normal)
+	
+	if intersection:
+		# Grid-Position mit Floor-Offset (nutze GridManager Funktion!)
+		var relative_grid_pos = grid_manager.world_to_grid_floor_relative(intersection, merc.viewing_floor)
+		
+		if grid_manager.is_grid_pos_in_floor(relative_grid_pos, merc.viewing_floor):
+			var player_pos = merc.movement_component.current_grid_pos
+			
+			var dx = abs(relative_grid_pos.x - player_pos.x)
+			var dy = abs(relative_grid_pos.y - player_pos.y)
+			var distance = min(dx, dy) + abs(dx - dy)
+			var ap_cost = distance * 2
+			var ap_sufficient = merc.action_point_component.has_ap(ap_cost)
+			
+			visual_grids[merc.viewing_floor].update_highlight(relative_grid_pos, ap_sufficient)
+		else:
+			visual_grids[merc.viewing_floor].clear_highlight()
+	else:
+		visual_grids[merc.viewing_floor].clear_highlight()
+
 func setup_scene() -> void:
 	print("\n[SETUP] Creating 5x 10x10 Grids (Floors 0-4) NEBENEINANDER...")
-	
-	# Grids nebeneinander angeordnet:
-	# Floor 0: CENTER (0,0)
-	# Floor 1: RECHTS (12,0)
-	# Floor 2: OBEN (0,12)
-	# Floor 3: LINKS (-12,0)
-	# Floor 4: UNTEN (0,-12)
-	# Jedes Grid ist 10x10 Tiles, Y-Höhe: floor * 3.0m
 	
 	var grid_configs = [
 		{"floor": 0, "pos": Vector2i(0, 0), "desc": "CENTER"},
@@ -67,11 +96,11 @@ func setup_scene() -> void:
 	
 	await get_tree().process_frame
 	
-	fov_visualizer = Node3D.new()
+	fov_visualizer = FOVVisualizer.new()
 	add_child(fov_visualizer)
 	
 	grid_manager = GridManager.new()
-	grid_manager.set_grid_bounds_3d(Vector2i(-12, -12), Vector2i(22, 22), 5)
+	grid_manager.auto_calculate_bounds_from_grids(visual_grids, 5)
 	add_child(grid_manager)
 	
 	turn_manager = TurnManager.new()
@@ -95,50 +124,43 @@ func setup_units() -> void:
 	var merc_scene = preload("res://scenes/entities/Merc.tscn")
 	var ivan_data = load("res://resources/mercs/ivan_dolvich.tres")
 	
-	# === PLAYER - Floor 0 CENTER (5,5) ===
 	merc = merc_scene.instantiate()
 	merc.merc_data = ivan_data
 	merc.weapon_data = akm_weapon
 	merc.is_player_unit = true
-	merc.global_position = Vector3(5.5, 0.0, 5.5)  # Mitte Floor 0 Grid
+	merc.global_position = Vector3(5.5, 0.0, 5.5)
 	add_child(merc)
 	
-	# === ENEMIES - AM RAND DER ANDEREN GRIDS ===
-	
-	# Enemy 1 - Floor 1 RECHTS (12,0) am Rand - Grid(9,5)
 	enemy1 = merc_scene.instantiate()
 	enemy1.merc_data = ivan_data.duplicate()
 	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1)"
 	enemy1.weapon_data = akm_weapon.duplicate()
 	enemy1.is_player_unit = false
-	enemy1.global_position = Vector3(21.5, 3.0, 5.5)  # 12+9.5 = 21.5
+	enemy1.global_position = Vector3(21.5, 3.0, 5.5)
 	add_child(enemy1)
 	
-	# Enemy 2 - Floor 2 OBEN (0,12) am Rand - Grid(5,9)
 	enemy2 = merc_scene.instantiate()
 	enemy2.merc_data = ivan_data.duplicate()
 	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2)"
 	enemy2.weapon_data = akm_weapon.duplicate()
 	enemy2.is_player_unit = false
-	enemy2.global_position = Vector3(5.5, 6.0, 21.5)  # 12+9.5 = 21.5
+	enemy2.global_position = Vector3(5.5, 6.0, 21.5)
 	add_child(enemy2)
 	
-	# Enemy 3 - Floor 3 LINKS (-12,0) am Rand - Grid(0,5)
 	enemy3 = merc_scene.instantiate()
 	enemy3.merc_data = ivan_data.duplicate()
 	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3)"
 	enemy3.weapon_data = akm_weapon.duplicate()
 	enemy3.is_player_unit = false
-	enemy3.global_position = Vector3(-10.5, 9.0, 5.5)  # -12+0.5 = -10.5
+	enemy3.global_position = Vector3(-10.5, 9.0, 5.5)
 	add_child(enemy3)
 	
-	# Enemy 4 - Floor 4 UNTEN (0,-12) am Rand - Grid(5,0)
 	enemy4 = merc_scene.instantiate()
 	enemy4.merc_data = ivan_data.duplicate()
 	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4)"
 	enemy4.weapon_data = akm_weapon.duplicate()
 	enemy4.is_player_unit = false
-	enemy4.global_position = Vector3(5.5, 12.0, -10.5)  # -12+0.5 = -10.5
+	enemy4.global_position = Vector3(5.5, 12.0, -10.5)
 	add_child(enemy4)
 	
 	all_enemies = [enemy1, enemy2, enemy3, enemy4]
@@ -160,12 +182,11 @@ func start_game() -> void:
 	
 	for enemy_unit in all_enemies:
 		enemy_unit.initialize_movement(grid_manager)
-		# Setze Etagen
 		match all_enemies.find(enemy_unit):
-			0: enemy_unit.movement_component.current_floor = 1  # Enemy 1 = Floor 1
-			1: enemy_unit.movement_component.current_floor = 2  # Enemy 2 = Floor 2
-			2: enemy_unit.movement_component.current_floor = 3  # Enemy 3 = Floor 3
-			3: enemy_unit.movement_component.current_floor = 4  # Enemy 4 = Floor 4
+			0: enemy_unit.movement_component.current_floor = 1
+			1: enemy_unit.movement_component.current_floor = 2
+			2: enemy_unit.movement_component.current_floor = 3
+			3: enemy_unit.movement_component.current_floor = 4
 		
 		turn_manager.register_enemy_unit(enemy_unit)
 		fow_system.register_enemy_unit(enemy_unit)
@@ -244,7 +265,6 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		handle_key_input(event.keycode)
 	
-	# Kamerabewegung mit Pfeiltasten + Page Up/Down
 	if event is InputEventKey and not event.echo:
 		var camera = get_node("Camera3D")
 		if camera:
@@ -271,6 +291,10 @@ func _input(event: InputEvent) -> void:
 
 func handle_key_input(key: int) -> void:
 	match key:
+		KEY_TAB:
+			merc.viewing_floor = (merc.viewing_floor + 1) % grid_manager.max_floors
+			print("[FLOOR] Switched to Floor: %d" % merc.viewing_floor)
+			get_tree().root.set_input_as_handled()
 		KEY_Q:
 			if merc.rotate_to_angle(merc.facing_system.get_facing_angle() - 45.0):
 				print("PLAYER ROTATED LEFT")
@@ -318,79 +342,30 @@ func handle_click() -> void:
 	var camera = get_viewport().get_camera_3d()
 	var mouse_pos = get_viewport().get_mouse_position()
 	var from = camera.project_ray_origin(mouse_pos)
-	var plane = Plane(Vector3.UP, 0)
-	var intersection = plane.intersects_ray(from, camera.project_ray_normal(mouse_pos))
+	var normal = camera.project_ray_normal(mouse_pos)
+	
+	# Plane auf aktueller viewing_floor Höhe
+	var floor_height = merc.viewing_floor * grid_manager.FLOOR_HEIGHT
+	var plane = Plane(Vector3.UP, floor_height)
+	var intersection = plane.intersects_ray(from, normal)
 	
 	if intersection:
-		var grid_pos = grid_manager.world_to_grid(intersection)
-		if merc.can_move_to_grid(grid_pos) and merc.move_to_grid(grid_pos):
-			print("PLAYER MOVED: %s" % grid_pos)
-			update_fov_visualization()
-			update_fog_of_war()
-			ui_panel.update_display(merc)
-			test_los_system()
+		# Grid-Position mit Floor-Offset (relativ)
+		var relative_grid_pos = grid_manager.world_to_grid_floor_relative(intersection, merc.viewing_floor)
+		
+		if grid_manager.is_grid_pos_in_floor(relative_grid_pos, merc.viewing_floor):
+			# Berechne ABSOLUTE Grid-Position
+			var floor_offset = visual_grids[merc.viewing_floor].grid_position
+			var absolute_grid_pos = relative_grid_pos + floor_offset
+			
+			if merc.move_to_grid_absolute(absolute_grid_pos, merc.viewing_floor):
+				print("PLAYER MOVED: %s (Floor %d)" % [absolute_grid_pos, merc.viewing_floor])
+				update_fog_of_war()
+				ui_panel.update_display(merc)
+				test_los_system()
 
 func update_fov_visualization() -> void:
-	for child in fov_visualizer.get_children():
-		child.queue_free()
-	
-	var mesh_instance = MeshInstance3D.new()
-	fov_visualizer.add_child(mesh_instance)
-	
-	var immediate_mesh = ImmediateMesh.new()
-	mesh_instance.mesh = immediate_mesh
-	
-	var material = StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mesh_instance.material_override = material
-	
-	immediate_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	
-	const BLOCKED = 0
-	const PARTIAL = 1
-	const CLEAR = 2
-	
-	for pos in merc.fov_grid:
-		var visibility = merc.fov_grid[pos]
-		var color: Color
-		
-		match visibility:
-			BLOCKED:
-				continue
-			PARTIAL:
-				color = Color(1.0, 1.0, 0.0, 0.4)
-			CLEAR:
-				color = Color(0.0, 1.0, 0.0, 0.4)
-		
-		_draw_tile(immediate_mesh, pos, color)
-	
-	immediate_mesh.surface_end()
-
-func _draw_tile(mesh: ImmediateMesh, grid_pos: Vector2i, color: Color) -> void:
-	var world_pos = grid_manager.grid_to_world(grid_pos)
-	var tile_size = grid_manager.TILE_SIZE
-	var height = 0.01
-	
-	var tl = Vector3(world_pos.x - tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
-	var tr = Vector3(world_pos.x + tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
-	var bl = Vector3(world_pos.x - tile_size * 0.5, height, world_pos.z + tile_size * 0.5)
-	var br = Vector3(world_pos.x + tile_size * 0.5, height, world_pos.z + tile_size * 0.5)
-	
-	mesh.surface_set_color(color)
-	mesh.surface_add_vertex(tl)
-	mesh.surface_set_color(color)
-	mesh.surface_add_vertex(tr)
-	mesh.surface_set_color(color)
-	mesh.surface_add_vertex(bl)
-	
-	mesh.surface_set_color(color)
-	mesh.surface_add_vertex(tr)
-	mesh.surface_set_color(color)
-	mesh.surface_add_vertex(br)
-	mesh.surface_set_color(color)
-	mesh.surface_add_vertex(bl)
+	fov_visualizer.update_fov_display(merc, grid_manager)
 
 func _on_enemy_revealed(enemy_unit: Merc) -> void:
 	print("\n🔍 ENEMY REVEALED: %s" % enemy_unit.merc_data.merc_name)

@@ -21,6 +21,9 @@ const FOVGridSystem = preload("res://scripts/systems/fov_grid_system.gd")
 var grid_position: Vector2i = Vector2i(0, 0)
 var grid_manager_ref: GridManager
 
+# ===== VIEWING SYSTEM (Floor für Interaktion) =====
+var viewing_floor: int = 0  # Welcher Floor angezeigt wird zum Laufen/Interagieren
+
 # ===== ALTE 2D-SYSTEM (UNVERÄNDERT) =====
 var fov_grid: Dictionary = {}
 
@@ -46,9 +49,8 @@ func initialize() -> void:
 	health_component.set_status_effect_system(status_effect_system)
 	visual_component.set_team_color(is_player_unit)
 	
-	# WICHTIG: Dupliziere Mesh für jede Unit-Instanz!
-	# FÜR TESTS DEAKTIVIERT - nur Code-Simulation, keine Meshes!
-	# _duplicate_mesh()
+	# Dupliziere Mesh für jede Unit-Instanz!
+	_duplicate_mesh()
 	
 	if weapon_data:
 		combat_component.initialize(self, weapon_data, action_point_component)
@@ -197,6 +199,16 @@ func is_alive() -> bool:
 func move_to_grid(target_pos: Vector2i) -> bool:
 	animation_component.play_move()
 	var success = movement_component.move_to(target_pos)
+	if success:
+		animation_component.play_idle()
+		update_fov_grid()
+		update_fov_grids_3d()
+	return success
+
+func move_to_grid_absolute(target_pos: Vector2i, target_floor: int) -> bool:
+	"""Bewegt Unit zu absoluter Position mit FOV Update"""
+	animation_component.play_move()
+	var success = movement_component.move_to_grid_absolute(target_pos, target_floor)
 	if success:
 		animation_component.play_idle()
 		update_fov_grid()
