@@ -16,7 +16,8 @@ var fow_system: FogOfWarSystem
 
 func _ready() -> void:
 	print("\n" + "=".repeat(70))
-	print("FOV TEST - CLEAN LAYOUT (5x 10x10 Grids - Floors 0-4)")
+	print("FOV TEST - NEW MAP STRUCTURE")
+	print("Floor 0: 40x40 CENTER | Floors 1-4: 10x10 in CORNERS")
 	print("=".repeat(70))
 	
 	var camera = get_node("Camera3D")
@@ -71,20 +72,22 @@ func update_hover_highlight() -> void:
 		visual_grids[merc.viewing_floor].clear_highlight()
 
 func setup_scene() -> void:
-	print("\n[SETUP] Creating 5x 10x10 Grids (Floors 0-4) NEBENEINANDER...")
+	print("\n[SETUP] NEW MAP STRUCTURE:")
+	print("  Floor 0: 40x40 CENTER (gives bounds for all floors)")
+	print("  Floors 1-4: 10x10 in CORNERS (no overlap with Floor 0)\n")
 	
 	var grid_configs = [
-		{"floor": 0, "pos": Vector2i(0, 0), "desc": "CENTER"},
-		{"floor": 1, "pos": Vector2i(12, 0), "desc": "RECHTS"},
-		{"floor": 2, "pos": Vector2i(0, 12), "desc": "OBEN"},
-		{"floor": 3, "pos": Vector2i(-12, 0), "desc": "LINKS"},
-		{"floor": 4, "pos": Vector2i(0, -12), "desc": "UNTEN"}
+		{"floor": 0, "pos": Vector2i(0, 0), "size": Vector2i(40, 40), "desc": "CENTER 40x40"},
+		{"floor": 1, "pos": Vector2i(0, 0), "size": Vector2i(10, 10), "desc": "TOP-LEFT 10x10 (ABOVE Floor 0)"},
+		{"floor": 2, "pos": Vector2i(30, 0), "size": Vector2i(10, 10), "desc": "TOP-RIGHT 10x10 (ABOVE Floor 0)"},
+		{"floor": 3, "pos": Vector2i(30, 30), "size": Vector2i(10, 10), "desc": "BOTTOM-RIGHT 10x10 (ABOVE Floor 0)"},
+		{"floor": 4, "pos": Vector2i(0, 30), "size": Vector2i(10, 10), "desc": "BOTTOM-LEFT 10x10 (ABOVE Floor 0)"}
 	]
 	
-	print("\n[SETUP] Creating Visual Grids (nebeneinander):")
+	print("[SETUP] Creating Visual Grids:")
 	for config in grid_configs:
 		var visual_grid = VisualGrid.new()
-		visual_grid.grid_size = Vector2i(10, 10)
+		visual_grid.grid_size = config.size
 		visual_grid.floor = config.floor
 		visual_grid.grid_position = config.pos
 		visual_grid.tile_size = 1.0
@@ -92,12 +95,20 @@ func setup_scene() -> void:
 		visual_grids.append(visual_grid)
 		
 		var floor_height = config.floor * 3.0
-		print("  %s: 10x10 Grid at (%d,%d) Height: %.1fm" % [config.desc, config.pos.x, config.pos.y, floor_height])
+		print("  %s: %dx%d Grid at (%d,%d) Height: %.1fm" % [
+			config.desc,
+			config.size.x,
+			config.size.y,
+			config.pos.x,
+			config.pos.y,
+			floor_height
+		])
 	
 	await get_tree().process_frame
 	
 	fov_visualizer = FOVVisualizer.new()
 	add_child(fov_visualizer)
+	print("[SETUP] FOVVisualizer created")
 	
 	grid_manager = GridManager.new()
 	grid_manager.auto_calculate_bounds_from_grids(visual_grids, 5)
@@ -117,60 +128,65 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	print("\n[SETUP] Scene ready - 5 Grids 10x10, Spieler Mitte (5,5) Floor 0, Gegner am Rand (0 oder 9) pro Floor")
+	print("\n[SETUP] Map ready - Bounds given by Floor 0 (40x40)")
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
 	var merc_scene = preload("res://scenes/entities/Merc.tscn")
 	var ivan_data = load("res://resources/mercs/ivan_dolvich.tres")
 	
+	# Player: Floor 0, Center of 40x40 grid
 	merc = merc_scene.instantiate()
 	merc.merc_data = ivan_data
 	merc.weapon_data = akm_weapon
 	merc.is_player_unit = true
-	merc.global_position = Vector3(5.5, 0.0, 5.5)
+	merc.global_position = Vector3(20.5, 0.0, 20.5)
 	add_child(merc)
 	
+	# Enemy 1: Floor 1, Top-Left corner (0,0 grid)
 	enemy1 = merc_scene.instantiate()
 	enemy1.merc_data = ivan_data.duplicate()
-	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1)"
+	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1 - TOP-LEFT)"
 	enemy1.weapon_data = akm_weapon.duplicate()
 	enemy1.is_player_unit = false
-	enemy1.global_position = Vector3(21.5, 3.0, 5.5)
+	enemy1.global_position = Vector3(5.5, 3.0, 5.5)
 	add_child(enemy1)
 	
+	# Enemy 2: Floor 2, Top-Right corner (30,0 grid)
 	enemy2 = merc_scene.instantiate()
 	enemy2.merc_data = ivan_data.duplicate()
-	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2)"
+	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2 - TOP-RIGHT)"
 	enemy2.weapon_data = akm_weapon.duplicate()
 	enemy2.is_player_unit = false
-	enemy2.global_position = Vector3(5.5, 6.0, 21.5)
+	enemy2.global_position = Vector3(35.5, 6.0, 5.5)
 	add_child(enemy2)
 	
+	# Enemy 3: Floor 3, Bottom-Right corner (30,30 grid)
 	enemy3 = merc_scene.instantiate()
 	enemy3.merc_data = ivan_data.duplicate()
-	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3)"
+	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3 - BOTTOM-RIGHT)"
 	enemy3.weapon_data = akm_weapon.duplicate()
 	enemy3.is_player_unit = false
-	enemy3.global_position = Vector3(-10.5, 9.0, 5.5)
+	enemy3.global_position = Vector3(35.5, 9.0, 35.5)
 	add_child(enemy3)
 	
+	# Enemy 4: Floor 4, Bottom-Left corner (0,30 grid)
 	enemy4 = merc_scene.instantiate()
 	enemy4.merc_data = ivan_data.duplicate()
-	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4)"
+	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4 - BOTTOM-LEFT)"
 	enemy4.weapon_data = akm_weapon.duplicate()
 	enemy4.is_player_unit = false
-	enemy4.global_position = Vector3(5.5, 12.0, -10.5)
+	enemy4.global_position = Vector3(5.5, 12.0, 35.5)
 	add_child(enemy4)
 	
 	all_enemies = [enemy1, enemy2, enemy3, enemy4]
 	
 	print("\n>>> SETUP UNITS <<<")
-	print("Player: Floor 0 CENTER at Grid(5,5)")
-	print("Enemy 1: Floor 1 RECHTS at Grid(9,5)")
-	print("Enemy 2: Floor 2 OBEN at Grid(5,9)")
-	print("Enemy 3: Floor 3 LINKS at Grid(0,5)")
-	print("Enemy 4: Floor 4 UNTEN at Grid(5,0)")
+	print("Player: Floor 0 CENTER at Grid(20,20) World(20.5, 0, 20.5)")
+	print("Enemy 1: Floor 1 TOP-LEFT at Grid(5,5) World(5.5, 3, 5.5) [ABOVE Floor 0]")
+	print("Enemy 2: Floor 2 TOP-RIGHT at Grid(5,5) World(35.5, 6, 5.5) [ABOVE Floor 0]")
+	print("Enemy 3: Floor 3 BOTTOM-RIGHT at Grid(5,5) World(35.5, 9, 35.5) [ABOVE Floor 0]")
+	print("Enemy 4: Floor 4 BOTTOM-LEFT at Grid(5,5) World(5.5, 12, 35.5) [ABOVE Floor 0]")
 	print(">>> END SETUP <<<\n")
 
 func start_game() -> void:
@@ -193,6 +209,7 @@ func start_game() -> void:
 	
 	turn_manager.start_game()
 	ui_panel.update_display(merc)
+	print("[START_GAME] Calling update_fov_visualization()...")
 	update_fov_visualization()
 	update_fog_of_war()
 
@@ -255,6 +272,8 @@ func print_controls() -> void:
 	print("MOVE: Left Click")
 	print("ROTATE: Q (Left) | E (Right)")
 	print("STANCE: 1 (Stand) | 2 (Crouch) | 3 (Prone)")
+	print("FOV VIS: V (Toggle FOV Visualizer)")
+	print("FLOOR: TAB (Switch viewing floor)")
 	print("TEST: T (Test all LoS) | F (FOW Debug)")
 	print("=".repeat(70) + "\n")
 
@@ -294,6 +313,7 @@ func handle_key_input(key: int) -> void:
 		KEY_TAB:
 			merc.viewing_floor = (merc.viewing_floor + 1) % grid_manager.max_floors
 			print("[FLOOR] Switched to Floor: %d" % merc.viewing_floor)
+			update_fov_visualization()
 			get_tree().root.set_input_as_handled()
 		KEY_Q:
 			if merc.rotate_to_angle(merc.facing_system.get_facing_angle() - 45.0):
@@ -328,6 +348,11 @@ func handle_key_input(key: int) -> void:
 				update_fog_of_war()
 				ui_panel.update_display(merc)
 				test_los_system()
+		KEY_V:
+			print("[KEY_V] Toggling FOV Visualizer...")
+			fov_visualizer.toggle_visibility()
+			update_fov_visualization()
+			print("[KEY_V] FOV Visualizer toggle complete")
 		KEY_T:
 			test_los_system()
 		KEY_F:
@@ -363,9 +388,16 @@ func handle_click() -> void:
 				update_fog_of_war()
 				ui_panel.update_display(merc)
 				test_los_system()
+				update_fov_visualization()
 
 func update_fov_visualization() -> void:
+	print("[fov_test] === CALLING update_fov_visualization() ===")
+	print("[fov_test] fov_visualizer is_visible: ", fov_visualizer.is_visible)
+	print("[fov_test] merc: ", merc.merc_data.merc_name)
+	print("[fov_test] merc.viewing_floor: ", merc.viewing_floor)
+	print("[fov_test] merc.fov_grids.size(): ", merc.fov_grids.size())
 	fov_visualizer.update_fov_display(merc, grid_manager)
+	print("[fov_test] === END update_fov_visualization() ===\n")
 
 func _on_enemy_revealed(enemy_unit: Merc) -> void:
 	print("\n🔍 ENEMY REVEALED: %s" % enemy_unit.merc_data.merc_name)

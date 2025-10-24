@@ -175,6 +175,13 @@ func get_visibility_level_3d(target_pos: Vector2i, target_floor: int) -> int:
 	
 	return fov_grids[target_floor][target_pos]
 
+func get_fov_for_viewing_floor() -> Dictionary:
+	"""Gibt FOV für aktuellen viewing_floor zurück (für Visualisierung bei TAB)"""
+	if viewing_floor < 0 or viewing_floor >= fov_grids.size():
+		print("[Merc] WARNING: viewing_floor %d invalid, returning empty FOV" % viewing_floor)
+		return {}
+	return fov_grids.get(viewing_floor, {})
+
 # ===== COMBAT FUNKTIONEN =====
 
 func can_see_enemy(target: Merc) -> bool:
