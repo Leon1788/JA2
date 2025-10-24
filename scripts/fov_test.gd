@@ -16,7 +16,7 @@ var fow_system: FogOfWarSystem
 
 func _ready() -> void:
 	print("\n" + "=".repeat(70))
-	print("FOV TEST - NEW MAP STRUCTURE")
+	print("FOV TEST - NEW MAP STRUCTURE WITH FLOOR OBJECTS")
 	print("Floor 0: 40x40 CENTER | Floors 1-4: 10x10 in CORNERS")
 	print("=".repeat(70))
 	
@@ -28,6 +28,10 @@ func _ready() -> void:
 	setup_scene()
 	setup_units()
 	start_game()
+	
+	await get_tree().process_frame
+	spawn_test_wall()
+	
 	print_controls()
 	
 	await get_tree().create_timer(0.5).timeout
@@ -42,18 +46,15 @@ func update_hover_highlight() -> void:
 	var from = camera.project_ray_origin(mouse_pos)
 	var normal = camera.project_ray_normal(mouse_pos)
 	
-	# Clear alle anderen Floors
 	for i in range(visual_grids.size()):
 		if i != merc.viewing_floor:
 			visual_grids[i].clear_highlight()
 	
-	# Plane auf aktueller viewing_floor Höhe
 	var floor_height = merc.viewing_floor * grid_manager.FLOOR_HEIGHT
 	var plane = Plane(Vector3.UP, floor_height)
 	var intersection = plane.intersects_ray(from, normal)
 	
 	if intersection:
-		# Grid-Position mit Floor-Offset (nutze GridManager Funktion!)
 		var relative_grid_pos = grid_manager.world_to_grid_floor_relative(intersection, merc.viewing_floor)
 		
 		if grid_manager.is_grid_pos_in_floor(relative_grid_pos, merc.viewing_floor):
@@ -77,20 +78,29 @@ func setup_scene() -> void:
 	print("  Floors 1-4: 10x10 in CORNERS (no overlap with Floor 0)\n")
 	
 	var grid_configs = [
-		{"floor": 0, "pos": Vector2i(0, 0), "size": Vector2i(40, 40), "desc": "CENTER 40x40"},
-		{"floor": 1, "pos": Vector2i(0, 0), "size": Vector2i(10, 10), "desc": "TOP-LEFT 10x10 (ABOVE Floor 0)"},
-		{"floor": 2, "pos": Vector2i(30, 0), "size": Vector2i(10, 10), "desc": "TOP-RIGHT 10x10 (ABOVE Floor 0)"},
-		{"floor": 3, "pos": Vector2i(30, 30), "size": Vector2i(10, 10), "desc": "BOTTOM-RIGHT 10x10 (ABOVE Floor 0)"},
-		{"floor": 4, "pos": Vector2i(0, 30), "size": Vector2i(10, 10), "desc": "BOTTOM-LEFT 10x10 (ABOVE Floor 0)"}
+		{"floor": 0, "pos": Vector2i(0, 0), "size": Vector2i(40, 40), "desc": "CENTER 40x40", "floor_res": "Floor0_Grass"},
+		{"floor": 1, "pos": Vector2i(0, 0), "size": Vector2i(10, 10), "desc": "TOP-LEFT 10x10 (ABOVE Floor 0)", "floor_res": "Floor1_Metal"},
+		{"floor": 2, "pos": Vector2i(30, 0), "size": Vector2i(10, 10), "desc": "TOP-RIGHT 10x10 (ABOVE Floor 0)", "floor_res": "Floor2_Stone"},
+		{"floor": 3, "pos": Vector2i(30, 30), "size": Vector2i(10, 10), "desc": "BOTTOM-RIGHT 10x10 (ABOVE Floor 0)", "floor_res": "Floor3_Wood"},
+		{"floor": 4, "pos": Vector2i(0, 30), "size": Vector2i(10, 10), "desc": "BOTTOM-LEFT 10x10 (ABOVE Floor 0)", "floor_res": "Floor4_Ice"}
 	]
 	
-	print("[SETUP] Creating Visual Grids:")
+	print("[SETUP] Creating Visual Grids with Floor Objects:")
 	for config in grid_configs:
 		var visual_grid = VisualGrid.new()
 		visual_grid.grid_size = config.size
 		visual_grid.floor = config.floor
 		visual_grid.grid_position = config.pos
 		visual_grid.tile_size = 1.0
+		
+		var floor_data_path = "res://resources/floors/%s.tres" % config.floor_res
+		var floor_data = load(floor_data_path)
+		if floor_data:
+			visual_grid.floor_data = floor_data
+			print("  [✓] %s: FloorData loaded from %s" % [config.desc, floor_data_path])
+		else:
+			print("  [✗] %s: WARNING - FloorData not found at %s" % [config.desc, floor_data_path])
+		
 		add_child(visual_grid)
 		visual_grids.append(visual_grid)
 		
@@ -128,14 +138,13 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
-	print("\n[SETUP] Map ready - Bounds given by Floor 0 (40x40)")
+	print("\n[SETUP] Map ready - 5 Floor Objects created with colored surfaces")
 
 func setup_units() -> void:
 	var akm_weapon = load("res://resources/weapons/akm.tres")
 	var merc_scene = preload("res://scenes/entities/Merc.tscn")
 	var ivan_data = load("res://resources/mercs/ivan_dolvich.tres")
 	
-	# Player: Floor 0, Center of 40x40 grid
 	merc = merc_scene.instantiate()
 	merc.merc_data = ivan_data
 	merc.weapon_data = akm_weapon
@@ -143,7 +152,6 @@ func setup_units() -> void:
 	merc.global_position = Vector3(20.5, 0.0, 20.5)
 	add_child(merc)
 	
-	# Enemy 1: Floor 1, Top-Left corner (0,0 grid)
 	enemy1 = merc_scene.instantiate()
 	enemy1.merc_data = ivan_data.duplicate()
 	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1 - TOP-LEFT)"
@@ -152,7 +160,6 @@ func setup_units() -> void:
 	enemy1.global_position = Vector3(5.5, 3.0, 5.5)
 	add_child(enemy1)
 	
-	# Enemy 2: Floor 2, Top-Right corner (30,0 grid)
 	enemy2 = merc_scene.instantiate()
 	enemy2.merc_data = ivan_data.duplicate()
 	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2 - TOP-RIGHT)"
@@ -161,7 +168,6 @@ func setup_units() -> void:
 	enemy2.global_position = Vector3(35.5, 6.0, 5.5)
 	add_child(enemy2)
 	
-	# Enemy 3: Floor 3, Bottom-Right corner (30,30 grid)
 	enemy3 = merc_scene.instantiate()
 	enemy3.merc_data = ivan_data.duplicate()
 	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3 - BOTTOM-RIGHT)"
@@ -170,7 +176,6 @@ func setup_units() -> void:
 	enemy3.global_position = Vector3(35.5, 9.0, 35.5)
 	add_child(enemy3)
 	
-	# Enemy 4: Floor 4, Bottom-Left corner (0,30 grid)
 	enemy4 = merc_scene.instantiate()
 	enemy4.merc_data = ivan_data.duplicate()
 	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4 - BOTTOM-LEFT)"
@@ -188,6 +193,45 @@ func setup_units() -> void:
 	print("Enemy 3: Floor 3 BOTTOM-RIGHT at Grid(5,5) World(35.5, 9, 35.5) [ABOVE Floor 0]")
 	print("Enemy 4: Floor 4 BOTTOM-LEFT at Grid(5,5) World(5.5, 12, 35.5) [ABOVE Floor 0]")
 	print(">>> END SETUP <<<\n")
+
+func spawn_test_wall() -> void:
+	var wall_cover_data = CoverData.new()
+	wall_cover_data.cover_name = "Test Wall 3m"
+	wall_cover_data.cover_type = CoverData.CoverType.HIGH
+	wall_cover_data.cover_height = 3.0
+	wall_cover_data.is_destructible = false
+	
+	var wall = CoverObject.new()
+	wall.cover_data = wall_cover_data
+	
+	var wall_grid = Vector2i(6, 5)
+	var wall_world = grid_manager.grid_to_world(wall_grid)
+	wall.position = Vector3(wall_world.x, 3.0, wall_world.z)
+	wall.grid_position = wall_grid
+	
+	var mesh_inst = MeshInstance3D.new()
+	var box_mesh = BoxMesh.new()
+	box_mesh.size = Vector3(1.0, 3.0, 1.0)
+	mesh_inst.mesh = box_mesh
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = Color.RED
+	mesh_inst.material_override = mat
+	mesh_inst.position.y = 1.5
+	wall.add_child(mesh_inst)
+	
+	var col_shape = CollisionShape3D.new()
+	var box_shape = BoxShape3D.new()
+	box_shape.size = Vector3(1.0, 3.0, 1.0)
+	col_shape.shape = box_shape
+	col_shape.position.y = 1.5
+	wall.add_child(col_shape)
+	
+	wall.collision_layer = 1
+	wall.collision_mask = 0
+	
+	add_child(wall)
+	
+	print("\n>>> TEST WALL spawned at Grid", wall_grid, " (Floor 1) - 3m high RED wall <<<\n")
 
 func start_game() -> void:
 	await get_tree().process_frame
@@ -369,17 +413,14 @@ func handle_click() -> void:
 	var from = camera.project_ray_origin(mouse_pos)
 	var normal = camera.project_ray_normal(mouse_pos)
 	
-	# Plane auf aktueller viewing_floor Höhe
 	var floor_height = merc.viewing_floor * grid_manager.FLOOR_HEIGHT
 	var plane = Plane(Vector3.UP, floor_height)
 	var intersection = plane.intersects_ray(from, normal)
 	
 	if intersection:
-		# Grid-Position mit Floor-Offset (relativ)
 		var relative_grid_pos = grid_manager.world_to_grid_floor_relative(intersection, merc.viewing_floor)
 		
 		if grid_manager.is_grid_pos_in_floor(relative_grid_pos, merc.viewing_floor):
-			# Berechne ABSOLUTE Grid-Position
 			var floor_offset = visual_grids[merc.viewing_floor].grid_position
 			var absolute_grid_pos = relative_grid_pos + floor_offset
 			

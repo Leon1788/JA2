@@ -1,0 +1,8 @@
+[gd_resource type="Resource" script_class="FloorData" load_steps=2 format=3 uid="uid://floor0grass"]
+[ext_resource type="Script" path="res://scripts/data/FloorData.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+floor_name = "Grassland"
+floor_color = Color(0.2, 0.8, 0.2, 1.0)
+floor_height = 0.1

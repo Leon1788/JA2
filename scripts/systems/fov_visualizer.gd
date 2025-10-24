@@ -81,17 +81,16 @@ func update_fov_display(merc: Merc, grid_manager: GridManager) -> void:
 	print("[FOVVis] === END UPDATE_FOV_DISPLAY ===\n")
 
 func _draw_tile(mesh: ImmediateMesh, grid_pos: Vector2i, color: Color, grid_manager: GridManager, viewing_floor: int) -> void:
-	"""Zeichnet ein einzelnes Tile als 2 Dreiecke mit Y-Clipping an Floor-Grenzen"""
+	"""Zeichnet Kegel 0.01m unter Grid (Referenz)
+	Grid:  0m, 3m, 6m, ...
+	Kegel: -0.01m, 2.99m, 5.99m, ...
+	"""
 	var world_pos = grid_manager.grid_to_world(grid_pos)
 	var tile_size = grid_manager.TILE_SIZE
-	var height = viewing_floor * grid_manager.FLOOR_HEIGHT + 0.01
 	
-	# Y-Clipping: Tile stopp bei Floor-Grenzen
-	var floor_bottom = viewing_floor * grid_manager.FLOOR_HEIGHT
-	var floor_top = (viewing_floor + 1) * grid_manager.FLOOR_HEIGHT
-	
-	# Clamp height zwischen Floor-Grenzen
-	height = clamp(height, floor_bottom + 0.01, floor_top - 0.01)
+	# Kegel = Grid - 0.01 (Grid ist Referenz bei 0.0)
+	var grid_height = viewing_floor * grid_manager.FLOOR_HEIGHT + 0.0
+	var height = grid_height - 0.01
 	
 	var tl = Vector3(world_pos.x - tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
 	var tr = Vector3(world_pos.x + tile_size * 0.5, height, world_pos.z - tile_size * 0.5)
