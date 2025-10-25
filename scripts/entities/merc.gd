@@ -285,3 +285,33 @@ func set_dead_visual() -> void:
 func set_visibility(visible: bool) -> void:
 	if visual_component:
 		visual_component.set_visibility(visible)
+		
+func get_available_body_parts(target: Merc) -> Array[TargetingSystem.BodyPart]:
+	"""
+	Gibt nur sichtbare Body Parts zurück
+	Wird von UI für Menu Buttons verwendet
+	"""
+	return combat_component.get_available_body_parts(target)
+
+func shoot_at_3d(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionary:
+	"""
+	3D Version: Schießt auf Target mit Body Part
+	Prüft automatisch LoS
+	"""
+	if not can_shoot(target):
+		return {"success": false}
+	
+	animation_component.play_shoot()
+	visual_component.play_muzzle_flash()
+	
+	var result = combat_component.shoot(target, body_part)
+	
+	if result.hit:
+		var hit_pos = target.global_position + Vector3(0, 1, 0)
+		visual_component.play_hit_effect(hit_pos, result.body_part)
+		
+		if result.target_killed:
+			target.on_death()
+	
+	animation_component.play_idle()
+	return result

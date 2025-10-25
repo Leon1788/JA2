@@ -13,6 +13,7 @@ var visual_grids: Array[VisualGrid] = []
 var ui_panel: UnitInfoPanel
 var fov_visualizer: FOVVisualizer
 var fow_system: FogOfWarSystem
+var target_selection_ui: TargetSelectionPanel
 
 func _ready() -> void:
 	print("\n" + "=".repeat(70))
@@ -138,6 +139,13 @@ func setup_scene() -> void:
 	ui_panel = ui_scene.instantiate()
 	add_child(ui_panel)
 	
+	# Target Selection UI
+	var target_ui_scene = preload("res://scenes/ui/target_selection_panel.tscn")
+	target_selection_ui = target_ui_scene.instantiate()
+	add_child(target_selection_ui)
+	target_selection_ui.body_part_selected.connect(_on_body_part_selected)
+	target_selection_ui.hide()
+	
 	print("\n[SETUP] Map ready - 5 Floor Objects created with colored surfaces")
 
 func setup_units() -> void:
@@ -232,43 +240,35 @@ func spawn_test_wall() -> void:
 	
 	print("\n[FLOOR 4] Spawning window ring...")
 	spawn_window_ring(cover_scene, window_cover_data.duplicate(), 4, Vector2i(0, 30), 10, Color.MAGENTA)
-	
-	print("\n>>> ALL COVER OBJECTS SPAWNED <<<\n")
 
 func spawn_house_walls_floor_0(cover_scene: PackedScene, wall_cover_data: CoverData) -> void:
-	"""Spawnt HIGH COVER Ring NUR auf Floor 0 um (0,0)-(9,9)"""
-	print("\n>>> SPAWNING HOUSE WALLS ON FLOOR 0 <<<")
+	print("\n>>> SPAWNING HIGH WALLS ON FLOOR 0 <<<")
 	
-	var positions: Array[Vector2i] = []
+	var wall_positions = [
+		Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0), Vector2i(4, 0),
+		Vector2i(5, 0), Vector2i(6, 0), Vector2i(7, 0), Vector2i(8, 0), Vector2i(9, 0),
+		Vector2i(0, 1), Vector2i(9, 1),
+		Vector2i(0, 2), Vector2i(9, 2),
+		Vector2i(0, 3), Vector2i(9, 3),
+		Vector2i(0, 4), Vector2i(9, 4),
+		Vector2i(0, 5), Vector2i(9, 5),
+		Vector2i(0, 6), Vector2i(9, 6),
+		Vector2i(0, 7), Vector2i(9, 7),
+		Vector2i(0, 8), Vector2i(9, 8),
+		Vector2i(0, 9), Vector2i(1, 9), Vector2i(2, 9), Vector2i(3, 9), Vector2i(4, 9),
+		Vector2i(5, 9), Vector2i(6, 9), Vector2i(7, 9), Vector2i(8, 9), Vector2i(9, 9)
+	]
 	
-	# Top row (y=0)
-	for x in range(10):
-		positions.append(Vector2i(x, 0))
+	print("  Spawning %d wall segments..." % wall_positions.size())
 	
-	# Bottom row (y=9)
-	for x in range(10):
-		positions.append(Vector2i(x, 9))
-	
-	# Left column (x=0, ohne Ecken)
-	for y in range(1, 9):
-		positions.append(Vector2i(0, y))
-	
-	# Right column (x=9, ohne Ecken)
-	for y in range(1, 9):
-		positions.append(Vector2i(9, y))
-	
-	print("  Spawning %d HIGH WALLS on Floor 0..." % positions.size())
-	
-	for pos in positions:
+	for grid_pos in wall_positions:
 		var wall = cover_scene.instantiate()
 		wall.cover_data = wall_cover_data.duplicate()
-		wall.grid_position = pos
+		wall.grid_position = grid_pos
 		
-		var world_pos = grid_manager.grid_to_world_3d(pos, 0)
-		wall.position = world_pos
-		
+		var world_pos = grid_manager.grid_to_world_3d(grid_pos, 0)
+		wall.global_position = world_pos
 		add_child(wall)
-		await get_tree().process_frame
 		
 		if wall.mesh_instance:
 			wall.mesh_instance.mesh = wall.mesh_instance.mesh.duplicate()
@@ -277,48 +277,32 @@ func spawn_house_walls_floor_0(cover_scene: PackedScene, wall_cover_data: CoverD
 		
 		if wall.mesh_instance:
 			var mat = StandardMaterial3D.new()
-			mat.albedo_color = Color.DARK_GREEN
-			mat.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+			mat.albedo_color = Color.GREEN
 			wall.mesh_instance.material_override = mat
 		
-		grid_manager.place_cover_3d(pos, 0, wall)
+		grid_manager.place_cover_3d(grid_pos, 0, wall)
 	
-	print("  Floor 0 House Walls: ✅ DONE")
+	print("  Floor 0: %d walls spawned" % wall_positions.size())
 
-func spawn_window_ring(cover_scene: PackedScene, cover_data: CoverData, floor: int, offset: Vector2i, size: int, color: Color) -> void:
-	"""Spawnt LOW COVER (Fenster) Ring auf einem Floor"""
-	var window_positions: Array[Vector2i] = []
+func spawn_window_ring(cover_scene: PackedScene, window_cover_data: CoverData, floor: int, offset: Vector2i, size: int, color: Color) -> void:
+	var window_positions = []
 	
-	# Top row (y=0)
 	for x in range(size):
 		window_positions.append(Vector2i(x, 0))
-	
-	# Bottom row (y=size-1)
-	for x in range(size):
 		window_positions.append(Vector2i(x, size - 1))
-	
-	# Left column (x=0, ohne Ecken)
 	for y in range(1, size - 1):
 		window_positions.append(Vector2i(0, y))
-	
-	# Right column (x=size-1, ohne Ecken)
-	for y in range(1, size - 1):
 		window_positions.append(Vector2i(size - 1, y))
 	
-	print("  Spawning %d windows on Floor %d..." % [window_positions.size(), floor])
-	
-	for pos in window_positions:
-		var absolute_pos = offset + pos
-		
+	for grid_pos in window_positions:
+		var absolute_pos = grid_pos + offset
 		var window = cover_scene.instantiate()
-		window.cover_data = cover_data.duplicate()
+		window.cover_data = window_cover_data.duplicate()
 		window.grid_position = absolute_pos
 		
 		var world_pos = grid_manager.grid_to_world_3d(absolute_pos, floor)
-		window.position = world_pos
-		
+		window.global_position = world_pos
 		add_child(window)
-		await get_tree().process_frame
 		
 		if window.mesh_instance:
 			window.mesh_instance.mesh = window.mesh_instance.mesh.duplicate()
@@ -417,6 +401,7 @@ func _get_stance_name(stance: StanceSystem.Stance) -> String:
 func print_controls() -> void:
 	print("\n=== CONTROLS ===")
 	print("MOVE: Left Click")
+	print("SHOOT: Right Click on Enemy")
 	print("ROTATE: Q (Left) | E (Right)")
 	print("STANCE: 1 (Stand) | 2 (Crouch) | 3 (Prone)")
 	print("FOV VIS: V (Toggle FOV Visualizer)")
@@ -425,8 +410,28 @@ func print_controls() -> void:
 	print("=".repeat(70) + "\n")
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		handle_click()
+	# Wenn UI offen: Blockiere nur Movement/Camera Controls, NICHT Button Clicks
+	if target_selection_ui and target_selection_ui.visible:
+		# NICHT blocken: Button Clicks sollten durchkommen!
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			return
+		
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
+			return
+		
+		# Blocke nur Keyboard für Movement
+		if event is InputEventKey:
+			get_tree().root.set_input_as_handled()
+			return
+		
+		return
+	
+	if event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_LEFT:
+				handle_click()
+			MOUSE_BUTTON_RIGHT:
+				handle_right_click()
 	
 	if event is InputEventKey and event.pressed:
 		handle_key_input(event.keycode)
@@ -534,6 +539,71 @@ func handle_click() -> void:
 				ui_panel.update_display(merc)
 				test_los_system()
 				update_fov_visualization()
+
+func handle_right_click() -> void:
+	"""Rechtsklick: Raycast auf Enemy, wenn sichtbar → Shooting Menu"""
+	var camera = get_viewport().get_camera_3d()
+	var mouse_pos = get_viewport().get_mouse_position()
+	var from = camera.project_ray_origin(mouse_pos)
+	var to = from + camera.project_ray_normal(mouse_pos) * 1000.0
+	
+	var space_state = get_world_3d().direct_space_state
+	var query = PhysicsRayQueryParameters3D.create(from, to)
+	query.collision_mask = 0b10  # Layer 2 = Units
+	
+	var result = space_state.intersect_ray(query)
+	
+	if result.is_empty():
+		print("[RIGHT_CLICK] Nothing hit")
+		return
+	
+	var collider = result.collider
+	if not collider:
+		return
+	
+	# Ist es ein Enemy?
+	var target_enemy = null
+	for enemy in all_enemies:
+		if enemy.get_child(0) == collider or enemy == collider or enemy.is_ancestor_of(collider):
+			target_enemy = enemy
+			break
+	
+	if not target_enemy:
+		print("[RIGHT_CLICK] Hit something but not an enemy")
+		return
+	
+	print("[RIGHT_CLICK] Clicked on: %s" % target_enemy.merc_data.merc_name)
+	
+	# Prüfe: Can shoot?
+	if not merc.can_shoot(target_enemy):
+		print("[RIGHT_CLICK] Cannot shoot this target!")
+		return
+	
+	# Öffne Shooting Menu
+	target_selection_ui.show_target_selection(merc, target_enemy)
+
+func _on_body_part_selected(body_part: TargetingSystem.BodyPart, target: Merc) -> void:
+	"""UI: Body Part ausgewählt + Target übergeben → Schuss abfeuern"""
+	print("\n[BODY_PART_SELECTED] Signal received!")
+	print("  body_part: %s" % TargetingSystem.get_display_name(body_part))
+	print("  target: %s" % (target.merc_data.merc_name if target else "NULL"))
+	
+	if not target:
+		print("[BODY_PART_SELECTED] [✗] No target!")
+		return
+	
+	if not merc.can_shoot(target):
+		print("[BODY_PART_SELECTED] [✗] Cannot shoot!")
+		return
+	
+	print("[BODY_PART_SELECTED] [✓] Shooting at: %s - %s" % [target.merc_data.merc_name, TargetingSystem.get_display_name(body_part)])
+	
+	var result = merc.shoot_at(target, body_part)
+	print("[BODY_PART_SELECTED] Hit: %s | Damage: %d | Target Dead: %s" % [result.hit, result.damage, result.target_killed])
+	
+	ui_panel.update_display(merc)
+	update_fog_of_war()
+	print("[BODY_PART_SELECTED] Done\n")
 
 func update_fov_visualization() -> void:
 	print("[fov_test] === CALLING update_fov_visualization() ===")
