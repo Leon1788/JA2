@@ -108,6 +108,10 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 	Berechnet FOV-Grid für eine bestimmte Etage mit vollem Shadow-Casting
 	Funktioniert FLEXIBEL mit beliebig vielen Floors!
 	"""
+	print("[FOV-3D] === calculate_fov_grid_3d CALLED ===")
+	print("[FOV-3D]   Soldier Floor: %d" % soldier.movement_component.current_floor)
+	print("[FOV-3D]   Target Floor: %d" % target_floor)
+	
 	var fov_grid: Dictionary = {}
 	var soldier_pos = soldier.movement_component.current_grid_pos
 	var soldier_floor = soldier.movement_component.current_floor
@@ -169,8 +173,13 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 			# Andere Etage: 3D LoS mit Höhen-Check - FLEXIBEL FÜR BELIEBIG VIELE FLOORS
 			visibility = _check_line_of_sight_3d(soldier_pos, target_pos, soldier_eye_height, soldier_floor, target_floor, grid_manager)
 
-		# Nur echtes Cover wirft Schatten
+		# Nur echtes Cover wirft Schatten - WICHTIG: Prüfe auf target_floor, nicht soldier_floor!
 		var is_actual_cover = grid_manager.get_cover_at_3d(target_pos, target_floor) != null
+		
+		# DEBUG
+		if is_actual_cover:
+			print("[FOV-3D] Cover found at %s on Floor %d (soldier on Floor %d)" % [target_pos, target_floor, soldier_floor])
+		
 		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
 			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
 
@@ -183,26 +192,49 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 static func _check_line_of_sight_3d(from_pos: Vector2i, to_pos: Vector2i, eye_height: float, from_floor: int, to_floor: int, grid_manager: GridManager) -> int:
 	"""
 	Line-of-Sight Check mit 3D-Höhen für verschiedene Etagen
-	ÄNDERUNG: Nutzt grid_manager.max_floors statt hardcoded 4 Floors
+	ÄNDERUNG: Prüft Cover auf ALLEN Floors zwischen from_floor und to_floor!
 	"""
-	# Für 3D LoS auf anderen Etagen: vereinfacht prüfen
-	# (Real Raycasts werden in LineOfSightSystem gemacht)
+	# Bresenham-Linie zwischen Positionen
+	var line = _bresenham_line(from_pos, to_pos)
 	
-	var floor_distance = abs(to_floor - from_floor)
-	var max_floors = grid_manager.max_floors
+	# Linie zu kurz oder nur Start/Endpunkt -> immer sichtbar
+	if line.size() <= 2:
+		return VisibilityLevel.CLEAR
 	
-	# Max Sichtweite: dynamisch basierend auf Anzahl Floors
-	var max_floor_range = max_floors  # Alle Floors sichtbar (später: Cover/Distanz blockiert)
+	var highest_cover_height = 0.0
+	var closest_cover_distance = 999.0
+	var cover_found = false
 	
-	if floor_distance > max_floor_range:
+	# Prüfe alle Floors zwischen from und to
+	var min_floor = min(from_floor, to_floor)
+	var max_floor = max(from_floor, to_floor)
+	
+	# Prüfe alle Zellen auf der Linie auf ALLEN Floors dazwischen
+	for check_floor in range(min_floor, max_floor + 1):
+		for i in range(1, line.size()):
+			var cell = line[i]
+			var cover = grid_manager.get_cover_at_3d(cell, check_floor)
+			
+			if cover:
+				cover_found = true
+				var distance_to_cover = from_pos.distance_to(cell)
+				var cover_height = cover.cover_data.cover_height
+				
+				# Merke dir die höchste Deckung
+				if cover_height > highest_cover_height:
+					highest_cover_height = cover_height
+					closest_cover_distance = distance_to_cover
+				elif cover_height == highest_cover_height and distance_to_cover < closest_cover_distance:
+					closest_cover_distance = distance_to_cover
+	
+	# Keine Deckung gefunden -> freie Sicht
+	if not cover_found:
+		return VisibilityLevel.CLEAR
+	
+	# VEREINFACHT: Bei anderer Etage blockiert Cover wenn >= 2.0m hoch
+	if highest_cover_height >= 2.0:
 		return VisibilityLevel.BLOCKED
 	
-	# Wenn Position sehr weit weg: schwächer sichtbar
-	var horizontal_distance = from_pos.distance_to(to_pos)
-	if horizontal_distance > 12.0:
-		return VisibilityLevel.PARTIAL
-	
-	# Standard: sichtbar (reale Blockade wird durch Raycast geprüft)
 	return VisibilityLevel.CLEAR
 
 # ===== HELPER FUNKTIONEN (UNVERÄNDERT) =====

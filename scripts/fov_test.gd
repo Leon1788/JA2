@@ -212,31 +212,28 @@ func spawn_test_wall() -> void:
 		return
 	
 	print("    CoverObject.tscn loaded successfully!")
-	print("\n>>> SPAWNING TEST WALLS <<<")
+	print("\n>>> SPAWNING TEST WALLS ON ALL FLOORS <<<")
 	
-	# === WAND AUF FLOOR 0 ===
+	# === WAND AUF FLOOR 0 (Neben Player Grid 20,20) ===
 	var wall_floor0 = cover_scene.instantiate()
-	wall_floor0.cover_data = wall_cover_data
+	wall_floor0.cover_data = wall_cover_data.duplicate()
 	wall_floor0.grid_position = Vector2i(15, 20)
 	
 	var wall0_world = grid_manager.grid_to_world_3d(Vector2i(15, 20), 0)
 	wall_floor0.position = wall0_world
 	
 	add_child(wall_floor0)
-	
-	# WICHTIG: Warte bis _ready() aufgerufen wurde!
 	await get_tree().process_frame
 	
-	# Färbe Mesh blau
 	if wall_floor0.mesh_instance:
 		var mat0 = StandardMaterial3D.new()
 		mat0.albedo_color = Color.BLUE
 		wall_floor0.mesh_instance.material_override = mat0
 	
 	grid_manager.place_cover_3d(Vector2i(15, 20), 0, wall_floor0)
-	print("    FLOOR 0: Grid(15,20) - BLUE WALL")
+	print("    FLOOR 0: Grid(15,20) - BLUE WALL (near player)")
 	
-	# === WAND AUF FLOOR 1 ===
+	# === WAND AUF FLOOR 1 (Neben Enemy 1 bei Grid 5,5) ===
 	var wall_floor1 = cover_scene.instantiate()
 	wall_floor1.cover_data = wall_cover_data.duplicate()
 	wall_floor1.grid_position = Vector2i(6, 5)
@@ -245,19 +242,82 @@ func spawn_test_wall() -> void:
 	wall_floor1.position = wall1_world
 	
 	add_child(wall_floor1)
-	
-	# WICHTIG: Warte bis _ready() aufgerufen wurde!
 	await get_tree().process_frame
 	
-	# Färbe Mesh rot
 	if wall_floor1.mesh_instance:
 		var mat1 = StandardMaterial3D.new()
 		mat1.albedo_color = Color.RED
 		wall_floor1.mesh_instance.material_override = mat1
 	
 	grid_manager.place_cover_3d(Vector2i(6, 5), 1, wall_floor1)
-	print("    FLOOR 1: Grid(6,5) - RED WALL")
-	print(">>> WALLS SPAWNED <<<\n")
+	print("    FLOOR 1: Grid(6,5) - RED WALL (near Enemy 1)")
+	
+	# === WAND AUF FLOOR 2 (Neben Enemy 2 bei Grid 35,5) ===
+	var wall_floor2 = cover_scene.instantiate()
+	wall_floor2.cover_data = wall_cover_data.duplicate()
+	wall_floor2.grid_position = Vector2i(36, 5)
+	
+	var wall2_world = grid_manager.grid_to_world_3d(Vector2i(36, 5), 2)
+	wall_floor2.position = wall2_world
+	
+	add_child(wall_floor2)
+	await get_tree().process_frame
+	
+	if wall_floor2.mesh_instance:
+		var mat2 = StandardMaterial3D.new()
+		mat2.albedo_color = Color.GREEN
+		wall_floor2.mesh_instance.material_override = mat2
+	
+	grid_manager.place_cover_3d(Vector2i(36, 5), 2, wall_floor2)
+	print("    FLOOR 2: Grid(36,5) - GREEN WALL (near Enemy 2)")
+	
+	# === WAND AUF FLOOR 3 (Neben Enemy 3 bei Grid 35,35) ===
+	var wall_floor3 = cover_scene.instantiate()
+	wall_floor3.cover_data = wall_cover_data.duplicate()
+	wall_floor3.grid_position = Vector2i(36, 35)
+	
+	var wall3_world = grid_manager.grid_to_world_3d(Vector2i(36, 35), 3)
+	wall_floor3.position = wall3_world
+	
+	add_child(wall_floor3)
+	await get_tree().process_frame
+	
+	if wall_floor3.mesh_instance:
+		var mat3 = StandardMaterial3D.new()
+		mat3.albedo_color = Color.YELLOW
+		wall_floor3.mesh_instance.material_override = mat3
+	
+	grid_manager.place_cover_3d(Vector2i(36, 35), 3, wall_floor3)
+	print("    FLOOR 3: Grid(36,35) - YELLOW WALL (near Enemy 3)")
+	
+	# === WAND AUF FLOOR 4 (Neben Enemy 4 bei Grid 5,35) ===
+	var wall_floor4 = cover_scene.instantiate()
+	wall_floor4.cover_data = wall_cover_data.duplicate()
+	wall_floor4.grid_position = Vector2i(6, 35)
+	
+	var wall4_world = grid_manager.grid_to_world_3d(Vector2i(6, 35), 4)
+	wall_floor4.position = wall4_world
+	
+	add_child(wall_floor4)
+	await get_tree().process_frame
+	
+	if wall_floor4.mesh_instance:
+		var mat4 = StandardMaterial3D.new()
+		mat4.albedo_color = Color.MAGENTA
+		wall_floor4.mesh_instance.material_override = mat4
+	
+	grid_manager.place_cover_3d(Vector2i(6, 35), 4, wall_floor4)
+	print("    FLOOR 4: Grid(6,35) - MAGENTA WALL (near Enemy 4)")
+	
+	print(">>> WALLS SPAWNED ON ALL 5 FLOORS <<<\n")
+	
+	# WICHTIG: FOV neu berechnen, weil Cover jetzt existiert!
+	print("[WALLS] Recalculating FOV for all units...")
+	if merc:
+		merc.update_fov_grids_3d()
+	for enemy in all_enemies:
+		enemy.update_fov_grids_3d()
+	print("[WALLS] FOV recalculation complete!")
 
 func start_game() -> void:
 	await get_tree().process_frame
