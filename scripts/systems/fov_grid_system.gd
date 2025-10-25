@@ -63,7 +63,10 @@ static func calculate_fov_grid(soldier: Merc, grid_manager: GridManager) -> Dict
 		var visibility = _check_line_of_sight_3d_wrapper(soldier_pos, target_pos, soldier_eye_height, soldier_floor, grid_manager)
 
 		# --- (V14 LOGIK - Nur echtes Cover wirft Schatten) ---
-		var is_actual_cover = grid_manager.get_cover_at_3d(target_pos, soldier_floor) != null
+		# WICHTIG: FloorObject (Böden) sollen KEINE Schatten werfen auf gleichem Floor!
+		var cover_at_pos = grid_manager.get_cover_at_3d(target_pos, soldier_floor)
+		var is_actual_cover = cover_at_pos != null and not cover_at_pos is FloorObject
+		
 		if is_actual_cover and visibility == VisibilityLevel.BLOCKED:
 			_add_to_shadow_map(shadow_blocked, angle_to_tile, distance)
 			# Prüfe auf die spezifischen Cover-Positionen für Debugging
@@ -107,14 +110,21 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 	"""
 	Berechnet FOV-Grid für eine bestimmte Etage mit vollem Shadow-Casting
 	Funktioniert FLEXIBEL mit beliebig vielen Floors!
+	
+	WICHTIG: FOV Grid simuliert "als ob Player auf target_floor steht"!
+	Rays für LineOfSight nutzen ECHTE Position (current_floor)!
 	"""
 	print("[FOV-3D] === calculate_fov_grid_3d CALLED ===")
-	print("[FOV-3D]   Soldier Floor: %d" % soldier.movement_component.current_floor)
-	print("[FOV-3D]   Target Floor: %d" % target_floor)
+	print("[FOV-3D]   Soldier Physical Floor: %d" % soldier.movement_component.current_floor)
+	print("[FOV-3D]   Target Floor (for FOV Grid): %d" % target_floor)
 	
 	var fov_grid: Dictionary = {}
 	var soldier_pos = soldier.movement_component.current_grid_pos
-	var soldier_floor = soldier.movement_component.current_floor
+	
+	# WICHTIG: Für FOV Grid nutze target_floor als "soldier_floor"!
+	# Das simuliert "als ob Player auf diesem Floor steht"
+	var soldier_floor = target_floor  # ✅ NICHT current_floor!
+	
 	var soldier_eye_height = soldier.stance_system.get_eye_height()
 	var facing_angle = soldier.facing_system.get_facing_angle()
 	var fov_angle = soldier.facing_system.fov_angle
@@ -174,7 +184,9 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 			visibility = _check_line_of_sight_3d(soldier_pos, target_pos, soldier_eye_height, soldier_floor, target_floor, grid_manager)
 
 		# Nur echtes Cover wirft Schatten - WICHTIG: Prüfe auf target_floor, nicht soldier_floor!
-		var is_actual_cover = grid_manager.get_cover_at_3d(target_pos, target_floor) != null
+		# WICHTIG: FloorObject (Böden) sollen KEINE Schatten werfen!
+		var cover_at_pos = grid_manager.get_cover_at_3d(target_pos, target_floor)
+		var is_actual_cover = cover_at_pos != null and not cover_at_pos is FloorObject
 		
 		# DEBUG
 		if is_actual_cover:
@@ -216,9 +228,24 @@ static func _check_line_of_sight_3d(from_pos: Vector2i, to_pos: Vector2i, eye_he
 			var cover = grid_manager.get_cover_at_3d(cell, check_floor)
 			
 			if cover:
+				# Cover kann CoverObject ODER FloorObject sein - beide haben cover_data!
+				if not cover.get("cover_data"):
+					continue  # Kein cover_data? Überspringe
+				
+				# WICHTIG: Böden blockieren NUR zwischen verschiedenen Floors!
+				# FloorObject vom EIGENEN Floor (from_floor) ignorieren!
+				# Nur FloorObject von ANDEREN Floors blockieren
+				if cover is FloorObject and check_floor == from_floor:
+					continue  # Eigener Floor blockiert nicht!
+				
+				# WICHTIG: Low Cover (<2.0m) wie Fenster ignorieren bei Multi-Floor!
+				# Von anderem Floor kann man über/unter Low Cover schauen
+				var cover_height = cover.cover_data.cover_height
+				if cover_height < 2.0:
+					continue  # Low Cover ignorieren bei Multi-Floor!
+				
 				cover_found = true
 				var distance_to_cover = from_pos.distance_to(cell)
-				var cover_height = cover.cover_data.cover_height
 				
 				# Merke dir die höchste Deckung
 				if cover_height > highest_cover_height:
@@ -231,10 +258,13 @@ static func _check_line_of_sight_3d(from_pos: Vector2i, to_pos: Vector2i, eye_he
 	if not cover_found:
 		return VisibilityLevel.CLEAR
 	
-	# VEREINFACHT: Bei anderer Etage blockiert Cover wenn >= 2.0m hoch
+	# Bei Multi-Floor: Nur HIGH Cover (>= 2.0m) blockiert
+	# Low Cover (Fenster 0.8m) blockiert NICHT wenn Player von anderem Floor schaut!
+	# (Realistische Rays werden in LineOfSightSystem berechnet)
 	if highest_cover_height >= 2.0:
 		return VisibilityLevel.BLOCKED
 	
+	# Low Cover blockiert nicht bei Multi-Floor
 	return VisibilityLevel.CLEAR
 
 # ===== HELPER FUNKTIONEN (UNVERÄNDERT) =====
@@ -311,6 +341,15 @@ static func _check_line_of_sight(from: Vector2i, to: Vector2i, eye_height: float
 		var cover = grid_manager.get_cover_at_3d(cell, floor)  # 3D Version mit Floor!
 
 		if cover:
+			# Cover kann CoverObject ODER FloorObject sein - beide haben cover_data!
+			if not cover.get("cover_data"):
+				continue  # Kein cover_data? Überspringe
+			
+			# WICHTIG: Böden (FloorObject) blockieren NUR zwischen verschiedenen Floors!
+			# Auf gleichem Floor: Ignoriere Floor-Cover (sonst blockiert sich alles selbst!)
+			if cover is FloorObject:
+				continue  # Floor-Cover auf gleichem Floor ignorieren!
+			
 			cover_found = true
 			var distance_to_cover = from.distance_to(cell) # Euklidische Distanz
 			var cover_height = cover.cover_data.cover_height

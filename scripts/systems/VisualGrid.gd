@@ -13,6 +13,9 @@ var highlight_mesh: MeshInstance3D
 var current_highlight_pos: Vector2i = Vector2i(-999, -999)
 var highlight_ap_sufficient: bool = false
 
+# NEU: Speichere FloorObject Referenz für GridManager
+var floor_object: FloorObject = null
+
 func _ready() -> void:
 	if not floor_data:
 		print("[VisualGrid] WARNING: floor_data is null! Skipping floor object creation.")
@@ -27,7 +30,7 @@ func create_floor_object() -> void:
 		print("[VisualGrid] WARNING: floor_data not set!")
 		return
 	
-	var floor_object = FloorObject.new()
+	floor_object = FloorObject.new()  # Speichere Referenz!
 	floor_object.floor_data = floor_data
 	floor_object.width = grid_size.x
 	floor_object.length = grid_size.y

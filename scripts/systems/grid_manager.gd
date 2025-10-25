@@ -15,7 +15,7 @@ var grid_max: Vector2i = Vector2i(10, 10)
 var max_floors: int = 1
 var floor_data: Dictionary = {}
 var floor_cover_data: Dictionary = {}
-var visual_grids: Array[VisualGrid] = []  # NEU: speichere alle VisualGrids
+var visual_grids: Array[VisualGrid] = []
 
 # ===== HELPER FUNKTIONEN FÜR FLEXIBLE FLOOR-VALIDIERUNG =====
 func set_max_floors(count: int) -> void:
@@ -152,7 +152,7 @@ func set_grid_bounds_3d(min_pos: Vector2i, max_pos: Vector2i, floors: int) -> vo
 
 func auto_calculate_bounds_from_grids(visual_grids_param: Array[VisualGrid], floors: int) -> void:
 	"""Berechnet automatisch Bounds aus allen VisualGrids - skalierbar für beliebige Maps!"""
-	visual_grids = visual_grids_param  # Speichere visual_grids!
+	visual_grids = visual_grids_param
 	
 	var min_x: int = 999999
 	var min_y: int = 999999
@@ -258,9 +258,36 @@ func remove_cover_3d(grid_pos: Vector2i, floor: int) -> void:
 		floor_cover_data[floor].erase(grid_pos)
 
 func get_cover_at_3d(grid_pos: Vector2i, floor: int) -> CoverObject:
+	"""
+	Gibt NUR echtes Cover zurück (Wände, Kisten etc.)
+	NICHT Floors! Floors blockieren separat.
+	"""
 	if not is_valid_floor(floor):
 		return null
 	
 	if floor_cover_data.has(floor) and floor_cover_data[floor].has(grid_pos):
-		return floor_cover_data[floor][grid_pos]
+		var cover_node = floor_cover_data[floor][grid_pos]
+		
+		# Prüfe ob es echtes Cover ist (nicht FloorObject!)
+		if cover_node is CoverObject:
+			return cover_node
+	
 	return null
+
+func has_floor_at(grid_pos: Vector2i, floor: int) -> bool:
+	"""
+	Prüft ob an dieser Position ein Floor existiert
+	Für Floor-Crossing Checks im Raycast
+	"""
+	if not is_valid_floor(floor):
+		return false
+	
+	if floor >= visual_grids.size():
+		return false
+	
+	var grid = visual_grids[floor]
+	var grid_offset = grid.grid_position
+	var relative_pos = grid_pos - grid_offset
+	
+	return relative_pos.x >= 0 and relative_pos.x < grid.grid_size.x and \
+		   relative_pos.y >= 0 and relative_pos.y < grid.grid_size.y

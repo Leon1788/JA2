@@ -124,6 +124,8 @@ func setup_scene() -> void:
 	grid_manager.auto_calculate_bounds_from_grids(visual_grids, 5)
 	add_child(grid_manager)
 	
+	# WICHTIG: Registriere ALLE Floors als Cover (Böden blockieren Rays!)
+	
 	turn_manager = TurnManager.new()
 	add_child(turn_manager)
 	
@@ -197,127 +199,110 @@ func setup_units() -> void:
 func spawn_test_wall() -> void:
 	print("\n=== SPAWN_TEST_WALL CALLED ===")
 	
-	# Lade DEIN wall_high.tres für Daten
+	# Lade wall_high.tres (2.5m)
 	var wall_cover_data = load("res://resources/cover/wall_high.tres")
 	if not wall_cover_data:
-		print("ERROR: wall_high.tres not found at res://resources/cover/wall_high.tres")
+		print("ERROR: wall_high.tres not found!")
 		return
 	
-	print("    wall_high.tres loaded successfully! Height=", wall_cover_data.cover_height, "m")
+	# Lade crate_low.tres (0.8m) für Fenster-Simulation
+	var window_cover_data = load("res://resources/cover/crate_low.tres")
+	if not window_cover_data:
+		print("ERROR: crate_low.tres not found!")
+		return
+	
+	print("    wall_high.tres loaded: Height=", wall_cover_data.cover_height, "m")
+	print("    crate_low.tres loaded: Height=", window_cover_data.cover_height, "m (WINDOW)")
 	
 	# Lade CoverObject Scene
 	var cover_scene = load("res://scenes/entities/CoverObject.tscn")
 	if not cover_scene:
-		print("ERROR: CoverObject.tscn not found at res://scenes/entities/CoverObject.tscn")
+		print("ERROR: CoverObject.tscn not found!")
 		return
 	
-	print("    CoverObject.tscn loaded successfully!")
-	print("\n>>> SPAWNING TEST WALLS ON ALL FLOORS <<<")
+	print("\n>>> SPAWNING WINDOW RINGS ON FLOORS 1-4 <<<")
 	
-	# === WAND AUF FLOOR 0 (Neben Player Grid 20,20) ===
-	var wall_floor0 = cover_scene.instantiate()
-	wall_floor0.cover_data = wall_cover_data.duplicate()
-	wall_floor0.grid_position = Vector2i(15, 20)
+	# === FLOOR 0: Kleine Stellung um Player (5x5 Ring bei 18,18) ===
+	print("\n[FLOOR 0] Spawning small window bunker around player...")
+	spawn_window_ring(cover_scene, window_cover_data, 0, Vector2i(18, 18), 5, Color.BLUE)
 	
-	var wall0_world = grid_manager.grid_to_world_3d(Vector2i(15, 20), 0)
-	wall_floor0.position = wall0_world
+	# === FLOOR 1: 10x10 Grid (0,0) to (9,9) - TOP-LEFT ===
+	print("\n[FLOOR 1] Spawning window ring...")
+	spawn_window_ring(cover_scene, window_cover_data, 1, Vector2i(0, 0), 10, Color.RED)
 	
-	add_child(wall_floor0)
-	await get_tree().process_frame
+	# === FLOOR 2: 10x10 Grid (30,0) to (39,9) - TOP-RIGHT ===
+	print("\n[FLOOR 2] Spawning window ring...")
+	spawn_window_ring(cover_scene, window_cover_data, 2, Vector2i(30, 0), 10, Color.GREEN)
 	
-	if wall_floor0.mesh_instance:
-		var mat0 = StandardMaterial3D.new()
-		mat0.albedo_color = Color.BLUE
-		wall_floor0.mesh_instance.material_override = mat0
+	# === FLOOR 3: 10x10 Grid (30,30) to (39,39) - BOTTOM-RIGHT ===
+	print("\n[FLOOR 3] Spawning window ring...")
+	spawn_window_ring(cover_scene, window_cover_data, 3, Vector2i(30, 30), 10, Color.YELLOW)
 	
-	grid_manager.place_cover_3d(Vector2i(15, 20), 0, wall_floor0)
-	print("    FLOOR 0: Grid(15,20) - BLUE WALL (near player)")
+	# === FLOOR 4: 10x10 Grid (0,30) to (9,39) - BOTTOM-LEFT ===
+	print("\n[FLOOR 4] Spawning window ring...")
+	spawn_window_ring(cover_scene, window_cover_data, 4, Vector2i(0, 30), 10, Color.MAGENTA)
 	
-	# === WAND AUF FLOOR 1 (Neben Enemy 1 bei Grid 5,5) ===
-	var wall_floor1 = cover_scene.instantiate()
-	wall_floor1.cover_data = wall_cover_data.duplicate()
-	wall_floor1.grid_position = Vector2i(6, 5)
+	print("\n>>> WINDOW RINGS SPAWNED <<<")
 	
-	var wall1_world = grid_manager.grid_to_world_3d(Vector2i(6, 5), 1)
-	wall_floor1.position = wall1_world
-	
-	add_child(wall_floor1)
-	await get_tree().process_frame
-	
-	if wall_floor1.mesh_instance:
-		var mat1 = StandardMaterial3D.new()
-		mat1.albedo_color = Color.RED
-		wall_floor1.mesh_instance.material_override = mat1
-	
-	grid_manager.place_cover_3d(Vector2i(6, 5), 1, wall_floor1)
-	print("    FLOOR 1: Grid(6,5) - RED WALL (near Enemy 1)")
-	
-	# === WAND AUF FLOOR 2 (Neben Enemy 2 bei Grid 35,5) ===
-	var wall_floor2 = cover_scene.instantiate()
-	wall_floor2.cover_data = wall_cover_data.duplicate()
-	wall_floor2.grid_position = Vector2i(36, 5)
-	
-	var wall2_world = grid_manager.grid_to_world_3d(Vector2i(36, 5), 2)
-	wall_floor2.position = wall2_world
-	
-	add_child(wall_floor2)
-	await get_tree().process_frame
-	
-	if wall_floor2.mesh_instance:
-		var mat2 = StandardMaterial3D.new()
-		mat2.albedo_color = Color.GREEN
-		wall_floor2.mesh_instance.material_override = mat2
-	
-	grid_manager.place_cover_3d(Vector2i(36, 5), 2, wall_floor2)
-	print("    FLOOR 2: Grid(36,5) - GREEN WALL (near Enemy 2)")
-	
-	# === WAND AUF FLOOR 3 (Neben Enemy 3 bei Grid 35,35) ===
-	var wall_floor3 = cover_scene.instantiate()
-	wall_floor3.cover_data = wall_cover_data.duplicate()
-	wall_floor3.grid_position = Vector2i(36, 35)
-	
-	var wall3_world = grid_manager.grid_to_world_3d(Vector2i(36, 35), 3)
-	wall_floor3.position = wall3_world
-	
-	add_child(wall_floor3)
-	await get_tree().process_frame
-	
-	if wall_floor3.mesh_instance:
-		var mat3 = StandardMaterial3D.new()
-		mat3.albedo_color = Color.YELLOW
-		wall_floor3.mesh_instance.material_override = mat3
-	
-	grid_manager.place_cover_3d(Vector2i(36, 35), 3, wall_floor3)
-	print("    FLOOR 3: Grid(36,35) - YELLOW WALL (near Enemy 3)")
-	
-	# === WAND AUF FLOOR 4 (Neben Enemy 4 bei Grid 5,35) ===
-	var wall_floor4 = cover_scene.instantiate()
-	wall_floor4.cover_data = wall_cover_data.duplicate()
-	wall_floor4.grid_position = Vector2i(6, 35)
-	
-	var wall4_world = grid_manager.grid_to_world_3d(Vector2i(6, 35), 4)
-	wall_floor4.position = wall4_world
-	
-	add_child(wall_floor4)
-	await get_tree().process_frame
-	
-	if wall_floor4.mesh_instance:
-		var mat4 = StandardMaterial3D.new()
-		mat4.albedo_color = Color.MAGENTA
-		wall_floor4.mesh_instance.material_override = mat4
-	
-	grid_manager.place_cover_3d(Vector2i(6, 35), 4, wall_floor4)
-	print("    FLOOR 4: Grid(6,35) - MAGENTA WALL (near Enemy 4)")
-	
-	print(">>> WALLS SPAWNED ON ALL 5 FLOORS <<<\n")
-	
-	# WICHTIG: FOV neu berechnen, weil Cover jetzt existiert!
+	# FOV neu berechnen
 	print("[WALLS] Recalculating FOV for all units...")
 	if merc:
 		merc.update_fov_grids_3d()
 	for enemy in all_enemies:
 		enemy.update_fov_grids_3d()
 	print("[WALLS] FOV recalculation complete!")
+
+func spawn_window_ring(cover_scene: PackedScene, cover_data: CoverData, floor: int, offset: Vector2i, size: int, color: Color) -> void:
+	"""
+	Spawnt einen Ring aus Low Cover (Fenster) um einen Floor
+	floor: Etage (1-4)
+	offset: Start-Position des 10x10 Grids
+	size: Größe des Grids (10)
+	color: Farbe für Visualisierung
+	"""
+	var window_positions: Array[Vector2i] = []
+	
+	# Top row (y=0)
+	for x in range(size):
+		window_positions.append(offset + Vector2i(x, 0))
+	
+	# Bottom row (y=size-1)
+	for x in range(size):
+		window_positions.append(offset + Vector2i(x, size - 1))
+	
+	# Left column (x=0, ohne Ecken)
+	for y in range(1, size - 1):
+		window_positions.append(offset + Vector2i(0, y))
+	
+	# Right column (x=size-1, ohne Ecken)
+	for y in range(1, size - 1):
+		window_positions.append(offset + Vector2i(size - 1, y))
+	
+	print("  Spawning %d windows on Floor %d" % [window_positions.size(), floor])
+	
+	# Spawne jedes Fenster
+	for pos in window_positions:
+		var window = cover_scene.instantiate()
+		window.cover_data = cover_data.duplicate()
+		window.grid_position = pos
+		
+		var world_pos = grid_manager.grid_to_world_3d(pos, floor)
+		window.position = world_pos
+		
+		add_child(window)
+		await get_tree().process_frame
+		
+		# Färbe Fenster
+		if window.mesh_instance:
+			var mat = StandardMaterial3D.new()
+			mat.albedo_color = color
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color.a = 0.5  # Halb-transparent für Fenster-Look
+			window.mesh_instance.material_override = mat
+		
+		grid_manager.place_cover_3d(pos, floor, window)
+	
+	print("  Floor %d: %d windows spawned" % [floor, window_positions.size()])
 
 func start_game() -> void:
 	await get_tree().process_frame
@@ -443,6 +428,10 @@ func handle_key_input(key: int) -> void:
 		KEY_TAB:
 			merc.viewing_floor = (merc.viewing_floor + 1) % grid_manager.max_floors
 			print("[FLOOR] Switched to Floor: %d" % merc.viewing_floor)
+			
+			# WICHTIG: FOV für neuen Floor berechnen!
+			merc.update_fov_grids_3d()
+			
 			update_fov_visualization()
 			get_tree().root.set_input_as_handled()
 		KEY_Q:

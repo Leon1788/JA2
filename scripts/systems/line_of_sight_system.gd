@@ -330,7 +330,8 @@ func _raycast_3d_code(target: Merc, body_part: String) -> bool:
 
 func _check_cover_along_ray_3d(from: Vector3, to: Vector3, target_floor: int) -> bool:
 	"""
-	Code-basiert: Prüfe ob Cover die Ray blockiert (MIT 3D FLOOR SUPPORT!)
+	Code-basiert: Prüfe ob ECHTES COVER die Ray blockiert (Wände, Kisten etc.)
+	Floors werden separat geprüft! get_cover_at_3d() gibt nur CoverObject zurück.
 	"""
 	if not owner_merc.grid_manager_ref:
 		return false
@@ -341,7 +342,7 @@ func _check_cover_along_ray_3d(from: Vector3, to: Vector3, target_floor: int) ->
 	var from_floor = owner_merc.movement_component.current_floor
 	var to_floor = target_floor
 	
-	print("[LoS]         Checking covers from Floor %d to Floor %d" % [from_floor, to_floor])
+	print("[LoS]         Checking REAL covers from Floor %d to Floor %d" % [from_floor, to_floor])
 	
 	# Bresenham-Linie auf Grid-Ebene
 	var from_grid = grid_manager.world_to_grid(from)
@@ -360,15 +361,14 @@ func _check_cover_along_ray_3d(from: Vector3, to: Vector3, target_floor: int) ->
 		var max_floor = max(from_floor, to_floor)
 		
 		for check_floor in range(min_floor, max_floor + 1):
-			# Gibt es Cover an dieser Position auf diesem Floor?
+			# Gibt es ECHTES Cover (nicht Floor!)
 			var cover = grid_manager.get_cover_at_3d(tile_pos, check_floor)
 			
-			print("[LoS]         Tile %s Floor %d: cover=%s" % [tile_pos, check_floor, "YES" if cover else "NO"])
-			
-			if not cover or not cover.cover_data:
+			if not cover:
 				continue
 			
-			print("[LoS]         Tile %s Floor %d: cover=YES (height=%.2fm)" % [tile_pos, check_floor, cover.cover_data.cover_height])
+			# get_cover_at_3d() gibt nur CoverObject zurück (Floors sind rausgefiltert!)
+			print("[LoS]         Tile %s Floor %d: REAL cover found (height=%.2fm)" % [tile_pos, check_floor, cover.cover_data.cover_height])
 			
 			# Berechne Ray-Höhe an diesem Tile
 			var ray_height = _lerp_3d_height(from, to, tile_pos, grid_manager)
@@ -384,6 +384,46 @@ func _check_cover_along_ray_3d(from: Vector3, to: Vector3, target_floor: int) ->
 			if ray_height >= cover_base and ray_height <= cover_top:
 				print("[LoS]         Cover at %s (Floor %d): ray_height=%.2fm in range [%.2fm-%.2fm] → BLOCKED" % 
 					[tile_pos, check_floor, ray_height, cover_base, cover_top])
+				return true
+	
+	# Prüfe Floor-Crossing separat (nur wenn zwischen verschiedenen Etagen!)
+	if from_floor != to_floor:
+		if _check_floor_crossing(from, to, from_floor, to_floor, grid_manager):
+			return true
+	
+	return false
+
+func _check_floor_crossing(from: Vector3, to: Vector3, from_floor: int, to_floor: int, grid_manager: GridManager) -> bool:
+	"""
+	Prüft ob Ray eine Floor-Ebene kreuzt (zwischen verschiedenen Etagen)
+	Floors blockieren NUR vertikal, nicht horizontal!
+	"""
+	print("[LoS]         Checking floor crossing between Floor %d and %d" % [from_floor, to_floor])
+	
+	var min_floor = mini(from_floor, to_floor)
+	var max_floor = maxi(from_floor, to_floor)
+	
+	# Prüfe jede Floor-Ebene zwischen from und to
+	for floor_check in range(min_floor + 1, max_floor + 1):
+		var floor_y = floor_check * GridManager.FLOOR_HEIGHT
+		
+		# Ray geht vertikal? (from.y != to.y)
+		if abs(to.y - from.y) < 0.01:
+			continue  # Horizontaler Ray, kreuzt keine Floor-Ebene
+		
+		# Berechne wo Ray die Floor-Ebene kreuzt
+		var t = (floor_y - from.y) / (to.y - from.y)
+		
+		# Crossing liegt auf dem Ray? (t zwischen 0 und 1)
+		if t >= 0.0 and t <= 1.0:
+			var crossing_x = lerp(from.x, to.x, t)
+			var crossing_z = lerp(from.z, to.z, t)
+			var crossing_pos = Vector3(crossing_x, floor_y, crossing_z)
+			var crossing_grid = grid_manager.world_to_grid(crossing_pos)
+			
+			# Gibt es einen Floor an dieser Position?
+			if grid_manager.has_floor_at(crossing_grid, floor_check):
+				print("[LoS]           Floor-Crossing: Ray kreuzt Floor %d bei Y=%.2fm → BLOCKED" % [floor_check, floor_y])
 				return true
 	
 	return false
