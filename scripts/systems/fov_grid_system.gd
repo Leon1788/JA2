@@ -15,25 +15,35 @@ static func calculate_fov_grid_3d(soldier: Merc, grid_manager: GridManager, targ
 	Berechnet FOV-Grid für eine bestimmte Etage
 	VEREINFACHT: Cone ist IMMER TRANSPARENT
 	Nur geometrische Sichtlinie (120° Cone), keine Shadow-Casting-Logik
+	
+	HEIGHT BONUS: Wenn Soldat höher steht, sieht er weiter nach unten
+	- +1 Tile pro Floor Höhenunterschied
 	"""
 	var fov_grid: Dictionary = {}
 	var soldier_pos = soldier.movement_component.current_grid_pos
+	var soldier_floor = soldier.movement_component.current_floor
 	var soldier_eye_height = soldier.stance_system.get_eye_height()
 	var facing_angle = soldier.facing_system.get_facing_angle()
 	var fov_angle = soldier.facing_system.fov_angle
-
+	
+	# Berechne Sichtradius mit Height-Bonus
+	var sight_range = MAX_SIGHT_RANGE
+	if target_floor < soldier_floor:
+		var height_bonus = soldier_floor - target_floor
+		sight_range = MAX_SIGHT_RANGE + height_bonus
+	
 	var tiles_to_check: Array = []
 
 	# Sammele alle Tiles auf dieser Etage innerhalb des Sichtradius
-	for x in range(soldier_pos.x - MAX_SIGHT_RANGE, soldier_pos.x + MAX_SIGHT_RANGE + 1):
-		for y in range(soldier_pos.y - MAX_SIGHT_RANGE, soldier_pos.y + MAX_SIGHT_RANGE + 1):
+	for x in range(soldier_pos.x - sight_range, soldier_pos.x + sight_range + 1):
+		for y in range(soldier_pos.y - sight_range, soldier_pos.y + sight_range + 1):
 			var target_pos = Vector2i(x, y)
 
 			if not grid_manager.is_within_bounds(target_pos):
 				continue
 
 			var distance = soldier_pos.distance_to(target_pos)
-			if distance > MAX_SIGHT_RANGE:
+			if distance > sight_range:
 				continue
 
 			tiles_to_check.append({"pos": target_pos, "dist": distance})
