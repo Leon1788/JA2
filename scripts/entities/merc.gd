@@ -233,10 +233,11 @@ func shoot_at(target: Merc, body_part: TargetingSystem.BodyPart = TargetingSyste
 	
 	if result.hit:
 		var hit_pos = target.global_position + Vector3(0, 1, 0)
-		visual_component.play_hit_effect(hit_pos, result.body_part)
-		
-		if result.target_killed:
-			target.on_death()
+		var part_name = TargetingSystem.get_display_name(result.body_part)
+		visual_component.play_hit_effect(hit_pos, part_name)
+	
+	if result.target_killed:
+		target.on_death()
 	
 	animation_component.play_idle()
 	return result

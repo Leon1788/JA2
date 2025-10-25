@@ -483,6 +483,7 @@ func handle_key_input(key: int) -> void:
 		KEY_1:
 			if merc.change_stance(StanceSystem.Stance.STANDING):
 				print("PLAYER STANCE: STANDING")
+				print("[STANCE] Accuracy Bonus: 0%")
 				update_fov_visualization()
 				update_fog_of_war()
 				ui_panel.update_display(merc)
@@ -490,6 +491,7 @@ func handle_key_input(key: int) -> void:
 		KEY_2:
 			if merc.change_stance(StanceSystem.Stance.CROUCHED):
 				print("PLAYER STANCE: CROUCHED")
+				print("[STANCE] Accuracy Bonus: +20%")
 				update_fov_visualization()
 				update_fog_of_war()
 				ui_panel.update_display(merc)
@@ -497,6 +499,7 @@ func handle_key_input(key: int) -> void:
 		KEY_3:
 			if merc.change_stance(StanceSystem.Stance.PRONE):
 				print("PLAYER STANCE: PRONE")
+				print("[STANCE] Accuracy Bonus: +40%")
 				update_fov_visualization()
 				update_fog_of_war()
 				ui_panel.update_display(merc)
@@ -515,6 +518,16 @@ func handle_key_input(key: int) -> void:
 			await get_tree().create_timer(0.5).timeout
 			turn_manager.end_turn()
 			ui_panel.update_display(merc)
+		KEY_D:
+			# Test: Schuss im aktuellen Stance anschauen
+			print("\n" + "=".repeat(70))
+			print("STANCE ACCURACY TEST - Current Stance")
+			print("=".repeat(70))
+			for enemy in all_enemies:
+				if merc.can_see_enemy(enemy):
+					var chance = merc.combat_component.get_hit_chance_for_part(enemy, TargetingSystem.BodyPart.THORAX)
+					print("vs %s: %.0f%% chance to hit THORAX" % [enemy.merc_data.merc_name, chance])
+			print("=".repeat(70) + "\n")
 
 func handle_click() -> void:
 	var camera = get_viewport().get_camera_3d()
