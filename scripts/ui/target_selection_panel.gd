@@ -1,55 +1,34 @@
-extends Control
+extends PanelContainer
 class_name TargetSelectionPanel
 
 signal body_part_selected(body_part: TargetingSystem.BodyPart)
 
-var head_button: Button
-var thorax_button: Button
-var stomach_button: Button
-var left_arm_button: Button
-var right_arm_button: Button
-var left_leg_button: Button
-var right_leg_button: Button
-var cover_label: Label
-var cancel_button: Button
-
-var shooter: Merc
-var target: Merc
+@onready var cover_label: Label = $VBoxContainer/CoverLabel
+@onready var head_button: Button = $VBoxContainer/GridContainer/HeadButton
+@onready var thorax_button: Button = $VBoxContainer/GridContainer/ThoraxButton
+@onready var stomach_button: Button = $VBoxContainer/GridContainer/StomachButton
+@onready var left_arm_button: Button = $VBoxContainer/GridContainer/LeftArmButton
+@onready var right_arm_button: Button = $VBoxContainer/GridContainer/RightArmButton
+@onready var left_leg_button: Button = $VBoxContainer/GridContainer/LeftLegButton
+@onready var right_leg_button: Button = $VBoxContainer/GridContainer/RightLegButton
 
 func _ready() -> void:
-	head_button = $VBoxContainer/HeadButton
-	thorax_button = $VBoxContainer/ThoraxButton
-	stomach_button = $VBoxContainer/StomachButton
-	left_arm_button = $VBoxContainer/LeftArmButton
-	right_arm_button = $VBoxContainer/RightArmButton
-	left_leg_button = $VBoxContainer/LeftLegButton
-	right_leg_button = $VBoxContainer/RightLegButton
-	cover_label = $VBoxContainer/CoverLabel
-	cancel_button = $VBoxContainer/CancelButton
-	
-	head_button.pressed.connect(_on_head_pressed)
-	thorax_button.pressed.connect(_on_thorax_pressed)
-	stomach_button.pressed.connect(_on_stomach_pressed)
-	left_arm_button.pressed.connect(_on_left_arm_pressed)
-	right_arm_button.pressed.connect(_on_right_arm_pressed)
-	left_leg_button.pressed.connect(_on_left_leg_pressed)
-	right_leg_button.pressed.connect(_on_right_leg_pressed)
-	cancel_button.pressed.connect(_on_cancel_pressed)
-	
-	hide()
+	if head_button:
+		head_button.pressed.connect(_on_head_pressed)
+	if thorax_button:
+		thorax_button.pressed.connect(_on_thorax_pressed)
+	if stomach_button:
+		stomach_button.pressed.connect(_on_stomach_pressed)
+	if left_arm_button:
+		left_arm_button.pressed.connect(_on_left_arm_pressed)
+	if right_arm_button:
+		right_arm_button.pressed.connect(_on_right_arm_pressed)
+	if left_leg_button:
+		left_leg_button.pressed.connect(_on_left_leg_pressed)
+	if right_leg_button:
+		right_leg_button.pressed.connect(_on_right_leg_pressed)
 
-func show_target_selection(from_shooter: Merc, to_target: Merc) -> void:
-	shooter = from_shooter
-	target = to_target
-	
-	show()
-	update_button_texts()
-
-func update_button_texts() -> void:
-	if not shooter or not target:
-		print("ERROR: No shooter or target!")
-		return
-	
+func update_display(shooter: Merc, target: Merc) -> void:
 	if not cover_label:
 		print("ERROR: cover_label not found!")
 		return
@@ -69,9 +48,6 @@ func update_button_texts() -> void:
 		FOVGridSystem.VisibilityLevel.BLOCKED:
 			cover_label.text = "NO LINE OF SIGHT!"
 			cover_label.add_theme_color_override("font_color", Color(1.0, 0.0, 0.0))
-		FOVGridSystem.VisibilityLevel.PARTIAL:
-			cover_label.text = "TARGET IN COVER!\n(-25% hit chance)"
-			cover_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.0))
 		FOVGridSystem.VisibilityLevel.CLEAR:
 			cover_label.text = "Clear Shot"
 			cover_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.3))
@@ -143,7 +119,4 @@ func _on_left_leg_pressed() -> void:
 
 func _on_right_leg_pressed() -> void:
 	body_part_selected.emit(TargetingSystem.BodyPart.RIGHT_LEG)
-	hide()
-
-func _on_cancel_pressed() -> void:
 	hide()

@@ -94,15 +94,8 @@ func get_hit_chance_for_part(target: Merc, body_part: TargetingSystem.BodyPart) 
 	var size_modifier = TargetingSystem.get_size_modifier(body_part)
 	var accuracy_modifier = owner_merc.status_effect_system.get_accuracy_modifier()
 	
-	# Cover penalty based on visibility level
+	# No cover penalty anymore - LineOfSightSystem handles visibility
 	var cover_penalty = 0.0
-	var target_pos = target.movement_component.current_grid_pos
-	var visibility = owner_merc.get_visibility_level(target_pos)
-	
-	if visibility == FOVGridSystem.VisibilityLevel.PARTIAL:
-		cover_penalty = 25.0  # GRÜN = durch Deckung
-	elif visibility == FOVGridSystem.VisibilityLevel.BLOCKED:
-		cover_penalty = 100.0  # Sollte nie passieren da can_shoot() bereits prüft
 	
 	var final_chance = (base_chance + aim_bonus + accuracy_modifier - distance_penalty + size_modifier - cover_penalty) * weapon_accuracy
 	
