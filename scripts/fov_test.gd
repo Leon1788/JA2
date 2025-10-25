@@ -156,44 +156,44 @@ func setup_units() -> void:
 	
 	enemy1 = merc_scene.instantiate()
 	enemy1.merc_data = ivan_data.duplicate()
-	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1 - TOP-LEFT)"
+	enemy1.merc_data.merc_name = "Enemy 1 (Floor 1 - AT WINDOW)"
 	enemy1.weapon_data = akm_weapon.duplicate()
 	enemy1.is_player_unit = false
-	enemy1.global_position = Vector3(5.5, 3.0, 5.5)
+	enemy1.global_position = Vector3(5.5, 3.0, 9.5)  # Floor 1, Fenster BOTTOM WALL (5, 9) -> zur Mitte
 	add_child(enemy1)
 	
 	enemy2 = merc_scene.instantiate()
 	enemy2.merc_data = ivan_data.duplicate()
-	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2 - TOP-RIGHT)"
+	enemy2.merc_data.merc_name = "Enemy 2 (Floor 2 - AT WINDOW)"
 	enemy2.weapon_data = akm_weapon.duplicate()
 	enemy2.is_player_unit = false
-	enemy2.global_position = Vector3(35.5, 6.0, 5.5)
+	enemy2.global_position = Vector3(30.5, 6.0, 5.5)  # Floor 2, Fenster LEFT WALL (30, 5) -> zur Mitte
 	add_child(enemy2)
 	
 	enemy3 = merc_scene.instantiate()
 	enemy3.merc_data = ivan_data.duplicate()
-	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3 - BOTTOM-RIGHT)"
+	enemy3.merc_data.merc_name = "Enemy 3 (Floor 3 - AT WINDOW)"
 	enemy3.weapon_data = akm_weapon.duplicate()
 	enemy3.is_player_unit = false
-	enemy3.global_position = Vector3(35.5, 9.0, 35.5)
+	enemy3.global_position = Vector3(35.5, 9.0, 30.5)  # Floor 3, Fenster TOP WALL (35, 30) -> zur Mitte
 	add_child(enemy3)
 	
 	enemy4 = merc_scene.instantiate()
 	enemy4.merc_data = ivan_data.duplicate()
-	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4 - BOTTOM-LEFT)"
+	enemy4.merc_data.merc_name = "Enemy 4 (Floor 4 - AT WINDOW)"
 	enemy4.weapon_data = akm_weapon.duplicate()
 	enemy4.is_player_unit = false
-	enemy4.global_position = Vector3(5.5, 12.0, 35.5)
+	enemy4.global_position = Vector3(9.5, 12.0, 35.5)  # Floor 4, Fenster RIGHT WALL (9, 35) -> zur Mitte
 	add_child(enemy4)
 	
 	all_enemies = [enemy1, enemy2, enemy3, enemy4]
 	
 	print("\n>>> SETUP UNITS <<<")
 	print("Player: Floor 0 CENTER at Grid(20,20) World(20.5, 0, 20.5)")
-	print("Enemy 1: Floor 1 TOP-LEFT at Grid(5,5) World(5.5, 3, 5.5) [ABOVE Floor 0]")
-	print("Enemy 2: Floor 2 TOP-RIGHT at Grid(5,5) World(35.5, 6, 5.5) [ABOVE Floor 0]")
-	print("Enemy 3: Floor 3 BOTTOM-RIGHT at Grid(5,5) World(35.5, 9, 35.5) [ABOVE Floor 0]")
-	print("Enemy 4: Floor 4 BOTTOM-LEFT at Grid(5,5) World(5.5, 12, 35.5) [ABOVE Floor 0]")
+	print("Enemy 1: Floor 1 AT WINDOW Grid(5,9) World(5.5, 3, 9.5) -> FACING CENTER")
+	print("Enemy 2: Floor 2 AT WINDOW Grid(30,5) World(30.5, 6, 5.5) -> FACING CENTER")
+	print("Enemy 3: Floor 3 AT WINDOW Grid(35,30) World(35.5, 9, 30.5) -> FACING CENTER")
+	print("Enemy 4: Floor 4 AT WINDOW Grid(9,35) World(9.5, 12, 35.5) -> FACING CENTER")
 	print(">>> END SETUP <<<\n")
 
 func spawn_test_wall() -> void:
