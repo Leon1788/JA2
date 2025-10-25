@@ -25,7 +25,7 @@ height = 1.8
 
 [node name="Merc" type="CharacterBody3D"]
 collision_layer = 2
-collision_mask = 0
+collision_mask = 3
 script = ExtResource("1")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
@@ -58,9 +58,6 @@ script = ExtResource("5")
 
 [node name="VisualComponent" type="Node" parent="."]
 script = ExtResource("6")
-player_material = ExtResource("12")
-enemy_material = ExtResource("13")
-dead_material = ExtResource("14")
 
 [node name="AnimationComponent" type="Node" parent="."]
 script = ExtResource("7")
