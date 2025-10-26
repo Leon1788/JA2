@@ -22,13 +22,19 @@ var grid_position: Vector2i = Vector2i(0, 0)
 var grid_manager_ref: GridManager
 
 # ===== VIEWING SYSTEM (Floor für Interaktion) =====
-var viewing_floor: int = 0  # Welcher Floor angezeigt wird zum Laufen/Interagieren
+var viewing_floor: int = 0
 
-# ===== ALTE 2D-SYSTEM (UNVERÄNDERT) =====
+# ===== ALTE 2D-SYSTEM =====
 var fov_grid: Dictionary = {}
 
 # ===== NEUE 3D-SYSTEM =====
-var fov_grids: Dictionary = {}  # floor (int) -> Dictionary (Vector2i -> VisibilityLevel)
+var fov_grids: Dictionary = {}
+
+# ===== NEW: TARGETING STATE SYSTEM =====
+var is_already_aimed: bool = false
+var invested_ap: int = 0
+var current_target: Merc = null
+var max_invested_ap: int = 10
 
 func _ready() -> void:
 	await get_tree().process_frame
@@ -49,14 +55,12 @@ func initialize() -> void:
 	health_component.set_status_effect_system(status_effect_system)
 	visual_component.set_team_color(is_player_unit)
 	
-	# Dupliziere Mesh für jede Unit-Instanz!
 	_duplicate_mesh()
 	
 	if weapon_data:
 		combat_component.initialize(self, weapon_data, action_point_component)
 
 func _duplicate_mesh() -> void:
-	# Hole Model MeshInstance
 	var visual_root = get_node_or_null("VisualRoot")
 	if not visual_root:
 		print("[Merc] WARNING: VisualRoot not found!")
@@ -67,14 +71,12 @@ func _duplicate_mesh() -> void:
 		print("[Merc] WARNING: Model MeshInstance3D not found!")
 		return
 	
-	# Dupliziere die Mesh Resource
 	if model_mesh.mesh:
 		model_mesh.mesh = model_mesh.mesh.duplicate()
 		print("[Merc] ", merc_data.merc_name, " - Mesh duplicated successfully")
 	else:
 		print("[Merc] WARNING: Model has no mesh!")
 	
-	# Dupliziere auch die CollisionShape
 	var collision_shape = get_node_or_null("CollisionShape3D")
 	if collision_shape and collision_shape.shape:
 		collision_shape.shape = collision_shape.shape.duplicate()
@@ -87,23 +89,17 @@ func initialize_movement(grid_manager: GridManager) -> void:
 	movement_component.initialize(self, grid_manager, action_point_component)
 	combat_component.grid_manager = grid_manager
 	
-	# Berechne initialer FOV Grid (alte 2D-Version)
 	update_fov_grid()
-	
-	# Berechne initiale FOV Grids pro Etage (neue 3D-Version)
 	update_fov_grids_3d()
 
-# ===== ALTE FUNKTIONEN (UNVERÄNDERT) =====
+# ===== FOV FUNCTIONS =====
 
 func update_fov_grid() -> void:
 	if grid_manager_ref:
 		fov_grid = FOVGridSystem.calculate_fov_grid(self, grid_manager_ref)
 		print("[Merc] ", merc_data.merc_name, " FOV updated. Visible tiles: ", fov_grid.size())
 		
-		# Invalidate LoS cache when FOV changes
 		line_of_sight_system.invalidate_cache()
-		
-		# WICHTIG: Invalidiere ALLE anderen Mercs' LoS-Caches!
 		_invalidate_all_los_caches()
 
 func _invalidate_all_los_caches() -> void:
@@ -125,10 +121,7 @@ func get_visibility_level(target_pos: Vector2i) -> int:
 		return FOVGridSystem.VisibilityLevel.BLOCKED
 	return fov_grid[target_pos]
 
-# ===== NEUE 3D-FUNKTIONEN =====
-
 func update_fov_grids_3d() -> void:
-	"""Berechnet FOV-Grids für ALLE Etagen - FLEXIBEL für jede Anzahl Floors"""
 	if not grid_manager_ref:
 		return
 	
@@ -141,12 +134,10 @@ func update_fov_grids_3d() -> void:
 		fov_grids[floor] = FOVGridSystem.calculate_fov_grid_3d(self, grid_manager_ref, floor)
 		print("[Merc]   Floor ", floor, ": ", fov_grids[floor].size(), " visible tiles")
 	
-	# Invalidate LoS cache
 	line_of_sight_system.invalidate_cache()
 	_invalidate_all_los_caches()
 
 func can_see_position_3d(target_pos: Vector2i, target_floor: int) -> bool:
-	"""Prüft ob Position auf bestimmter Etage im FOV ist"""
 	if not grid_manager_ref:
 		return false
 	
@@ -161,7 +152,6 @@ func can_see_position_3d(target_pos: Vector2i, target_floor: int) -> bool:
 	return fov_grids[target_floor][target_pos] > FOVGridSystem.VisibilityLevel.BLOCKED
 
 func get_visibility_level_3d(target_pos: Vector2i, target_floor: int) -> int:
-	"""Gibt Sichtbarkeitslevel für Position auf bestimmter Etage"""
 	if not grid_manager_ref:
 		return FOVGridSystem.VisibilityLevel.BLOCKED
 	
@@ -176,13 +166,12 @@ func get_visibility_level_3d(target_pos: Vector2i, target_floor: int) -> int:
 	return fov_grids[target_floor][target_pos]
 
 func get_fov_for_viewing_floor() -> Dictionary:
-	"""Gibt FOV für aktuellen viewing_floor zurück (für Visualisierung bei TAB)"""
 	if viewing_floor < 0 or viewing_floor >= fov_grids.size():
 		print("[Merc] WARNING: viewing_floor %d invalid, returning empty FOV" % viewing_floor)
 		return {}
 	return fov_grids.get(viewing_floor, {})
 
-# ===== COMBAT FUNKTIONEN =====
+# ===== COMBAT FUNCTIONS =====
 
 func can_see_enemy(target: Merc) -> bool:
 	return line_of_sight_system.can_see_enemy(target)
@@ -196,6 +185,7 @@ func start_turn() -> void:
 	status_effect_system.process_turn_effects()
 	update_fov_grid()
 	update_fov_grids_3d()
+	reset_targeting_state()
 
 func end_turn() -> void:
 	pass
@@ -213,7 +203,6 @@ func move_to_grid(target_pos: Vector2i) -> bool:
 	return success
 
 func move_to_grid_absolute(target_pos: Vector2i, target_floor: int) -> bool:
-	"""Bewegt Unit zu absoluter Position mit FOV Update"""
 	animation_component.play_move()
 	var success = movement_component.move_to_grid_absolute(target_pos, target_floor)
 	if success:
@@ -246,6 +235,7 @@ func aim() -> bool:
 	var success = combat_component.aim()
 	if success:
 		animation_component.play_aim()
+		set_aimed_state(true)
 	return success
 
 func can_shoot(target: Merc) -> bool:
@@ -286,19 +276,11 @@ func set_dead_visual() -> void:
 func set_visibility(visible: bool) -> void:
 	if visual_component:
 		visual_component.set_visibility(visible)
-		
+
 func get_available_body_parts(target: Merc) -> Array[TargetingSystem.BodyPart]:
-	"""
-	Gibt nur sichtbare Body Parts zurück
-	Wird von UI für Menu Buttons verwendet
-	"""
 	return combat_component.get_available_body_parts(target)
 
 func shoot_at_3d(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionary:
-	"""
-	3D Version: Schießt auf Target mit Body Part
-	Prüft automatisch LoS
-	"""
 	if not can_shoot(target):
 		return {"success": false}
 	
@@ -315,4 +297,52 @@ func shoot_at_3d(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionar
 			target.on_death()
 	
 	animation_component.play_idle()
+	return result
+
+# ===== NEW: TARGETING STATE FUNCTIONS =====
+
+func set_aimed_state(aimed: bool) -> void:
+	"""Setzt ob Waffe gezielt wurde"""
+	is_already_aimed = aimed
+	print("[Merc] %s aimed state: %s" % [merc_data.merc_name, "ON" if aimed else "OFF"])
+
+func reset_targeting_state() -> void:
+	"""Setzt Targeting State zurück nach Schuss"""
+	is_already_aimed = false
+	invested_ap = 0
+	current_target = null
+	print("[Merc] %s targeting state reset" % merc_data.merc_name)
+
+func is_currently_targeting(target: Merc) -> bool:
+	"""Prüft ob noch gleicher Ziel gezielt wird"""
+	return current_target == target and current_target != null
+
+func set_targeting_target(target: Merc) -> void:
+	"""Setzt aktuelles Ziel"""
+	if target != current_target:
+		print("[Merc] %s now targeting %s" % [merc_data.merc_name, target.merc_data.merc_name])
+		current_target = target
+		invested_ap = 1  # Erste AP-Investition
+
+func add_invested_ap() -> bool:
+	"""Addiert 1 AP zu Investment, returns true wenn unter max"""
+	if invested_ap < max_invested_ap:
+		invested_ap += 1
+		print("[Merc] %s invested AP: %d/%d" % [merc_data.merc_name, invested_ap, max_invested_ap])
+		return true
+	return false
+
+func get_invested_ap() -> int:
+	"""Gibt aktuell investierte AP zurück"""
+	return invested_ap
+
+func get_aimed_state() -> bool:
+	"""Gibt ob schon gezielt wurde zurück"""
+	return is_already_aimed
+
+func confirm_shot(target: Merc, body_part: TargetingSystem.BodyPart) -> Dictionary:
+	"""Bestätigt Schuss und setzt Targeting State zurück"""
+	print("[Merc] %s confirms shot with %d invested AP" % [merc_data.merc_name, invested_ap])
+	var result = shoot_at(target, body_part)
+	reset_targeting_state()
 	return result

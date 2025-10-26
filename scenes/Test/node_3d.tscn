@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://th7r0k86jgy7"]
+
+[ext_resource type="Script" path="res://scripts/targeting_state_test.gd" id="1_td7t7"]
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_td7t7")
